@@ -7,12 +7,12 @@ import {
   GraduationCap, 
   Video, 
   Shield, 
-  Award, 
   QrCode, 
-  PlayCircle,
   LogIn,
   LogOut,
-  Laptop
+  Laptop,
+  BookOpen,
+  ChevronDown
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -31,8 +31,6 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   currentPortal,
   onSelectPortal,
-  onOpenLearningRoom,
-  onOpenCertificate,
   onOpenPublicVerify,
   notifications,
   onMarkAllAsRead,
@@ -54,115 +52,82 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm print:hidden">
-      {/* Top micro-service banner */}
-      <div className="bg-[#2c3e50] text-slate-200 px-4 py-1 text-[11px] flex items-center justify-between font-mono">
-        <div className="flex items-center gap-2 truncate">
-          <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-          <span className="font-semibold text-white">API GATEWAY (:8080)</span>
-          <span className="text-slate-400 hidden sm:inline">• Reverse Proxy & JWT RBAC Active</span>
-        </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <button
-            onClick={onOpenCertificate}
-            className="text-amber-300 hover:text-white flex items-center gap-1 font-sans text-xs transition-colors cursor-pointer"
-            title="Mở xem khung chứng chỉ A4 hoàn thành"
+    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-200 shadow-xs print:hidden">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between gap-4">
+        {/* Left: Brand Logo & Navigation */}
+        <div className="flex items-center gap-8">
+          <div 
+            className="flex items-center gap-2.5 cursor-pointer group" 
+            onClick={() => onSelectPortal('learner')}
           >
-            <Award className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Xem Chứng Chỉ A4</span>
-          </button>
-          <span className="text-slate-600 hidden md:inline">|</span>
-          <button
-            onClick={onOpenPublicVerify}
-            className="text-emerald-300 hover:text-white flex items-center gap-1 font-sans text-xs transition-colors cursor-pointer"
-            title="Mở trang quét QR xác thực công khai"
-          >
-            <QrCode className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Xác thực QR Công khai</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Main Nav Bar */}
-      <div className="max-w-7xl mx-auto px-4 md:px-6 py-2.5 flex items-center justify-between gap-4">
-        {/* Left: Brand Logo & Title */}
-        <div 
-          className="flex items-center gap-3 shrink-0 cursor-pointer" 
-          onClick={() => onSelectPortal('learner')}
-        >
-          <div className="w-9 h-9 rounded-xl bg-[#2c3e50] text-white flex items-center justify-center font-black text-sm shadow-md border border-[#e74c3c]/40">
-            ET
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-black text-base md:text-lg tracking-tight text-[#2c3e50]">EduTech</span>
-              <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-[#e74c3c]/10 text-[#e74c3c]">
-                LMS
+            <div className="w-10 h-10 rounded-xl bg-[#2c3e50] text-white flex items-center justify-center font-black text-sm shadow-md border border-[#e74c3c]/30 group-hover:scale-105 transition duration-200">
+              <GraduationCap className="w-6 h-6 text-[#e74c3c]" />
+            </div>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-1.5">
+                <span className="font-black text-lg tracking-tight text-[#2c3e50]">
+                  Edu<span className="text-[#e74c3c]">Tech</span>
+                </span>
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 uppercase">
+                  LMS
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-400 font-medium -mt-1 hidden sm:block">
+                Nền tảng Đào tạo Chuyên sâu
               </span>
             </div>
-            <p className="text-[10px] text-slate-500 font-medium">Microservices Architecture</p>
           </div>
-        </div>
 
-        {/* Center: 3 Portals Switcher */}
-        <div className="hidden lg:flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200 text-xs font-bold">
-          <button
-            onClick={() => onSelectPortal('learner')}
-            className={`px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
-              currentPortal === 'learner'
-                ? 'bg-white text-[#2c3e50] shadow-sm font-extrabold'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <GraduationCap className={`w-4 h-4 ${currentPortal === 'learner' ? 'text-[#e74c3c]' : 'text-slate-500'}`} />
-            Học viên (Learner)
-          </button>
+          {/* Primary Navigation Tabs */}
+          <nav className="hidden md:flex items-center gap-1 text-xs font-bold">
+            <button
+              onClick={() => onSelectPortal('learner')}
+              className={`px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                currentPortal === 'learner'
+                  ? 'bg-slate-100 text-[#2c3e50] font-extrabold'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <BookOpen className={`w-4 h-4 ${currentPortal === 'learner' ? 'text-[#e74c3c]' : 'text-slate-400'}`} />
+              Khóa học
+            </button>
 
-          <button
-            onClick={() => onSelectPortal('instructor')}
-            className={`px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
-              currentPortal === 'instructor'
-                ? 'bg-white text-[#2c3e50] shadow-sm font-extrabold'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Video className={`w-4 h-4 ${currentPortal === 'instructor' ? 'text-indigo-600' : 'text-slate-500'}`} />
-            Giảng viên (Studio)
-          </button>
+            <button
+              onClick={() => onSelectPortal('instructor')}
+              className={`px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                currentPortal === 'instructor'
+                  ? 'bg-slate-100 text-[#2c3e50] font-extrabold'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <Video className={`w-4 h-4 ${currentPortal === 'instructor' ? 'text-indigo-600' : 'text-slate-400'}`} />
+              Giảng dạy
+            </button>
 
-          <button
-            onClick={() => onSelectPortal('admin')}
-            className={`px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
-              currentPortal === 'admin'
-                ? 'bg-white text-[#2c3e50] shadow-sm font-extrabold'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Shield className={`w-4 h-4 ${currentPortal === 'admin' ? 'text-emerald-600' : 'text-slate-500'}`} />
-            Quản trị (Admin)
-          </button>
+            <button
+              onClick={() => onSelectPortal('admin')}
+              className={`px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                currentPortal === 'admin'
+                  ? 'bg-slate-100 text-[#2c3e50] font-extrabold'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <Shield className={`w-4 h-4 ${currentPortal === 'admin' ? 'text-emerald-600' : 'text-slate-400'}`} />
+              Quản trị
+            </button>
+          </nav>
         </div>
 
         {/* Right: Quick Action CTAs & Profile */}
         <div className="flex items-center gap-2 md:gap-3 shrink-0">
-          {/* Direct CTA to Learning Room */}
+          {/* Quick Certificate Verify Link */}
           <button
-            onClick={onOpenLearningRoom}
-            className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-xl bg-[#2c3e50] hover:bg-[#1a252f] text-white shadow-sm transition-all hover:scale-105 cursor-pointer"
-            title="Vào ngay phòng học Cinema Mode để trải nghiệm video HLS AES-128"
+            onClick={onOpenPublicVerify}
+            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-[#2c3e50] hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+            title="Tra cứu chứng chỉ số hóa qua mã băm QR"
           >
-            <PlayCircle className="w-4 h-4 text-[#e74c3c]" />
-            <span>Vào Phòng Học</span>
-          </button>
-
-          {/* Quick Certificate View Button */}
-          <button
-            onClick={onOpenCertificate}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-[#e74c3c] hover:bg-[#c0392b] text-white shadow-sm transition-all cursor-pointer"
-            title="Xem nhanh chứng chỉ tốt nghiệp chuẩn A4"
-          >
-            <Award className="w-4 h-4 text-amber-200" />
-            <span className="hidden sm:inline">Chứng Chỉ</span>
+            <QrCode className="w-4 h-4 text-slate-500" />
+            <span>Xác thực Chứng chỉ</span>
           </button>
 
           {/* Notification Popover */}
@@ -178,17 +143,20 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="relative pl-2 border-l border-slate-200">
               <button
                 onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-                className="flex items-center gap-2 p-1 rounded-xl hover:bg-slate-100 transition cursor-pointer text-left"
+                className="flex items-center gap-2 p-1.5 pr-2.5 rounded-xl hover:bg-slate-100 transition cursor-pointer text-left border border-transparent hover:border-slate-200"
               >
-                <div className="w-8 h-8 rounded-xl bg-[#2c3e50] text-white font-bold flex items-center justify-center text-xs shadow-sm ring-2 ring-slate-200">
+                <div className="w-8 h-8 rounded-xl bg-[#2c3e50] text-white font-bold flex items-center justify-center text-xs shadow-sm">
                   {user.fullName ? user.fullName.charAt(0).toUpperCase() : 'U'}
                 </div>
-                <div className="hidden xl:block text-left text-xs leading-tight">
-                  <p className="font-bold text-[#2c3e50] truncate max-w-[120px]">{user.fullName || user.email}</p>
-                  <span className="text-[10px] text-slate-500 font-mono uppercase">
-                    {user.roles?.[0] || 'LEARNER'}
+                <div className="hidden lg:flex flex-col text-left">
+                  <span className="text-xs font-bold text-[#2c3e50] truncate max-w-[120px]">
+                    {user.fullName || user.email}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-medium capitalize">
+                    {user.roles?.[0]?.toLowerCase() || 'học viên'}
                   </span>
                 </div>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden lg:block" />
               </button>
 
               {/* Profile Dropdown */}
@@ -199,31 +167,31 @@ export const Header: React.FC<HeaderProps> = ({
                     <p className="text-[11px] text-slate-400 truncate">{user.email}</p>
                     <div className="mt-2 flex items-center gap-1 text-[10px] font-mono text-slate-500 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
                       <Laptop className="w-3 h-3 text-blue-500 shrink-0" />
-                      <span className="truncate">FP: {fingerprint || 'Active'}</span>
+                      <span className="truncate">Thiết bị: {fingerprint.substring(0, 16) || 'Đang bảo mật'}...</span>
                     </div>
                   </div>
 
-                  <div className="py-1 border-b border-slate-100 text-xs">
+                  <div className="py-1 border-b border-slate-100 text-xs font-medium">
                     <button
                       onClick={() => { setProfileDropdownOpen(false); onSelectPortal('learner'); }}
-                      className="w-full px-4 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition cursor-pointer"
+                      className="w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition cursor-pointer"
                     >
-                      <GraduationCap className="w-3.5 h-3.5 text-[#e74c3c]" />
-                      Chuyển sang Học viên
+                      <BookOpen className="w-4 h-4 text-[#e74c3c]" />
+                      Trang Học viên
                     </button>
                     <button
                       onClick={() => { setProfileDropdownOpen(false); onSelectPortal('instructor'); }}
-                      className="w-full px-4 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition cursor-pointer"
+                      className="w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition cursor-pointer"
                     >
-                      <Video className="w-3.5 h-3.5 text-indigo-600" />
-                      Chuyển sang Giảng viên
+                      <Video className="w-4 h-4 text-indigo-600" />
+                      Studio Giảng viên
                     </button>
                     <button
                       onClick={() => { setProfileDropdownOpen(false); onSelectPortal('admin'); }}
-                      className="w-full px-4 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition cursor-pointer"
+                      className="w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition cursor-pointer"
                     >
-                      <Shield className="w-3.5 h-3.5 text-emerald-600" />
-                      Chuyển sang Quản trị
+                      <Shield className="w-4 h-4 text-emerald-600" />
+                      Cổng Quản trị Hệ thống
                     </button>
                   </div>
 
@@ -232,7 +200,7 @@ export const Header: React.FC<HeaderProps> = ({
                       onClick={handleLogout}
                       className="w-full px-4 py-2 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2 transition cursor-pointer"
                     >
-                      <LogOut className="w-3.5 h-3.5" />
+                      <LogOut className="w-4 h-4" />
                       Đăng xuất khỏi thiết bị
                     </button>
                   </div>
@@ -240,12 +208,12 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </div>
           ) : (
-            <div className="pl-2 border-l border-slate-200">
+            <div className="pl-2 border-l border-slate-200 flex items-center gap-2">
               <button
                 onClick={onOpenAuthModal}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 text-[#2c3e50] border border-slate-300 shadow-xs transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-[#e74c3c] hover:bg-[#c0392b] text-white shadow-sm transition-all cursor-pointer"
               >
-                <LogIn className="w-3.5 h-3.5 text-[#e74c3c]" />
+                <LogIn className="w-3.5 h-3.5" />
                 <span>Đăng nhập</span>
               </button>
             </div>
@@ -253,44 +221,44 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Mobile Portal Navigation Bar */}
-      <div className="lg:hidden flex items-center justify-around border-t border-slate-200 py-1.5 bg-slate-50 text-[11px] font-bold">
+      {/* Mobile Bottom Navigation Bar */}
+      <div className="md:hidden flex items-center justify-around border-t border-slate-200 py-2 bg-white text-[11px] font-bold">
         <button
           onClick={() => onSelectPortal('learner')}
-          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg ${
+          className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors ${
             currentPortal === 'learner' ? 'bg-[#2c3e50] text-white' : 'text-slate-600'
           }`}
         >
-          <GraduationCap className="w-3.5 h-3.5" />
-          Học viên
+          <BookOpen className="w-4 h-4" />
+          Khóa học
         </button>
 
         <button
           onClick={() => onSelectPortal('instructor')}
-          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg ${
+          className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors ${
             currentPortal === 'instructor' ? 'bg-[#2c3e50] text-white' : 'text-slate-600'
           }`}
         >
-          <Video className="w-3.5 h-3.5" />
-          Giảng viên
+          <Video className="w-4 h-4" />
+          Giảng dạy
         </button>
 
         <button
           onClick={() => onSelectPortal('admin')}
-          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg ${
+          className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors ${
             currentPortal === 'admin' ? 'bg-[#2c3e50] text-white' : 'text-slate-600'
           }`}
         >
-          <Shield className="w-3.5 h-3.5" />
-          Admin
+          <Shield className="w-4 h-4" />
+          Quản trị
         </button>
 
         <button
-          onClick={onOpenLearningRoom}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#e74c3c] text-white"
+          onClick={onOpenPublicVerify}
+          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900"
         >
-          <PlayCircle className="w-3.5 h-3.5" />
-          Vào học
+          <QrCode className="w-4 h-4" />
+          Xác thực
         </button>
       </div>
     </header>

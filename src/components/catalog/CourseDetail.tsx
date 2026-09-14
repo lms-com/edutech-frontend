@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Course } from '../../types';
+import type { Course } from '../../types';
 import { MOCK_REVIEWS } from '../../data/mockData';
 import { 
   Star, 
@@ -15,8 +15,7 @@ import {
   Award, 
   Users, 
   Sparkles, 
-  ArrowLeft,
-  Lock
+  ArrowLeft
 } from 'lucide-react';
 
 interface CourseDetailProps {
@@ -42,14 +41,14 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
       {/* Back button */}
       <button
         onClick={onBack}
-        className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-[#2c3e50] transition-colors"
+        className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-[#2c3e50] transition-colors cursor-pointer"
       >
         <ArrowLeft className="w-4 h-4" />
         Quay lại Danh mục khóa học
       </button>
 
-      {/* Hero Header Area (Dark Slate with Microservices Accent) */}
-      <div className="bg-[#2c3e50] text-white p-6 md:p-10 rounded-3xl shadow-xl relative overflow-hidden">
+      {/* Hero Header Area */}
+      <div className="bg-[#1e293b] text-white p-6 md:p-10 rounded-3xl shadow-xl relative overflow-hidden">
         <div className="max-w-4xl space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <span className="px-3 py-1 rounded-full bg-[#e74c3c] text-white text-xs font-bold">
@@ -60,7 +59,7 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
             </span>
             <span className="px-3 py-1 rounded-full bg-emerald-900/60 text-emerald-300 text-xs font-semibold flex items-center gap-1">
               <ShieldCheck className="w-3.5 h-3.5" />
-              Chuẩn HLS AES-128
+              Chứng chỉ Xác thực
             </span>
           </div>
 
@@ -81,12 +80,12 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
 
             <div className="flex items-center gap-1.5">
               <Users className="w-4 h-4 text-slate-400" />
-              <span>{course.instructor.totalStudents.toLocaleString()} học viên ghi danh</span>
+              <span>{course.instructor.totalStudents.toLocaleString()} học viên</span>
             </div>
 
             <div className="flex items-center gap-1.5">
               <Calendar className="w-4 h-4 text-slate-400" />
-              <span>Cập nhật gần nhất: {course.updatedAt}</span>
+              <span>Cập nhật: {course.updatedAt}</span>
             </div>
 
             <div className="flex items-center gap-1.5">
@@ -99,7 +98,7 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
 
       {/* 2-Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column (65% -> 8 cols) */}
+        {/* Left Column (8 cols) */}
         <div className="lg:col-span-8 space-y-8">
           {/* What you'll learn */}
           <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
@@ -121,27 +120,21 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
 
           {/* Curriculum Accordion */}
           <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-[#2c3e50]">Giáo trình khóa học</h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {course.sections.length} chương • {course.totalLessons} bài học • Thời lượng {course.durationHours} giờ
-                </p>
-              </div>
-
-              <span className="text-xs font-mono text-slate-400">
-                GET /course-service/api/v1/courses/{course.id}
-              </span>
+            <div>
+              <h2 className="text-lg font-bold text-[#2c3e50]">Giáo trình khóa học</h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {course.sections.length} chương • {course.totalLessons} bài học • Thời lượng {course.durationHours} giờ
+              </p>
             </div>
 
             <div className="border border-slate-200 rounded-xl divide-y divide-slate-200 overflow-hidden">
-              {course.sections.map((section, idx) => {
+              {course.sections.map((section) => {
                 const isOpen = expandedSection === section.id;
                 return (
                   <div key={section.id}>
                     <button
                       onClick={() => setExpandedSection(isOpen ? '' : section.id)}
-                      className="w-full p-4 text-left bg-slate-50 hover:bg-slate-100 flex items-center justify-between transition-colors"
+                      className="w-full p-4 text-left bg-slate-50 hover:bg-slate-100 flex items-center justify-between transition-colors cursor-pointer"
                     >
                       <div className="flex items-center gap-2">
                         {isOpen ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
@@ -167,7 +160,7 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                               {lesson.isPreview && (
                                 <button
                                   onClick={() => setPlayingTrailer(true)}
-                                  className="text-[10px] font-bold text-[#e74c3c] bg-[#e74c3c]/10 px-2 py-0.5 rounded hover:bg-[#e74c3c]/20"
+                                  className="text-[10px] font-bold text-[#e74c3c] bg-[#e74c3c]/10 px-2 py-0.5 rounded hover:bg-[#e74c3c]/20 cursor-pointer"
                                 >
                                   Xem trước
                                 </button>
@@ -216,11 +209,8 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
 
           {/* Reviews List */}
           <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
+            <div>
               <h2 className="text-lg font-bold text-[#2c3e50]">Đánh giá từ học viên</h2>
-              <span className="text-xs text-slate-400 font-mono">
-                GET /enrollment-service/api/v1/reviews/courses/{course.id}
-              </span>
             </div>
 
             <div className="space-y-4">
@@ -249,7 +239,7 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
           </div>
         </div>
 
-        {/* Right Column (35% -> 4 cols Sticky Pricing Card) */}
+        {/* Right Column (4 cols Sticky Pricing Card) */}
         <div className="lg:col-span-4 sticky top-24 space-y-4">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
             {/* Trailer preview */}
@@ -290,28 +280,28 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                   )}
                 </div>
                 <p className="text-xs text-emerald-600 font-semibold">
-                  Tiết kiệm {formatVND((course.price) - (course.discountPrice || course.price))} (Giảm 32%)
+                  Tiết kiệm {formatVND((course.price) - (course.discountPrice || course.price))} (Giảm giá có thời hạn)
                 </p>
               </div>
 
               {/* Primary CTA */}
               <button
                 onClick={() => onStartLearning(course)}
-                className="w-full py-3.5 px-4 rounded-2xl bg-[#e74c3c] hover:bg-[#c0392b] text-white font-bold text-sm shadow-xl shadow-red-900/20 transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
+                className="w-full py-3.5 px-4 rounded-2xl bg-[#e74c3c] hover:bg-[#c0392b] text-white font-bold text-sm shadow-xl shadow-red-900/20 transition-all hover:scale-[1.02] flex items-center justify-center gap-2 cursor-pointer"
               >
                 <PlayCircle className="w-5 h-5" />
-                Đăng ký & Vào phòng học ngay
+                Vào phòng học ngay
               </button>
 
               {/* Highlights Checklist */}
               <div className="space-y-2.5 pt-3 border-t border-slate-100 text-xs text-slate-600 font-medium">
                 <div className="flex items-center gap-2.5">
                   <Clock className="w-4 h-4 text-slate-400" />
-                  <span>{course.durationHours} giờ video theo yêu cầu (HLS AES-128)</span>
+                  <span>{course.durationHours} giờ video bài giảng chất lượng cao</span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <BookOpen className="w-4 h-4 text-slate-400" />
-                  <span>{course.totalLessons} bài học & file tài liệu MinIO đính kèm</span>
+                  <span>{course.totalLessons} bài học kèm mã nguồn dự án</span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <Award className="w-4 h-4 text-emerald-600" />
@@ -319,12 +309,8 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                 </div>
                 <div className="flex items-center gap-2.5">
                   <ShieldCheck className="w-4 h-4 text-blue-600" />
-                  <span>Cam kết bảo đảm chất lượng & truy cập trọn đời</span>
+                  <span>Quyền truy cập học tập trọn đời</span>
                 </div>
-              </div>
-
-              <div className="p-3 bg-slate-50 rounded-xl text-center text-[11px] text-slate-500 font-mono">
-                API GATEWAY • JWT ACCESS
               </div>
             </div>
           </div>

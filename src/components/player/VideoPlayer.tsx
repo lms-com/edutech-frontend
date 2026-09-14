@@ -218,9 +218,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
               {playbackRate}x
             </button>
 
-            <div className="hidden md:flex items-center gap-1 text-[11px] text-slate-400">
-              <span>Token:</span>
-              <span className="font-mono text-slate-300">AES-128:KEY-OK</span>
+            <div className="hidden md:flex items-center gap-1.5 text-[11px] text-emerald-400 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-800/40">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Bảo vệ HLS</span>
             </div>
 
             <button

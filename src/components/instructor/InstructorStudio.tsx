@@ -17,17 +17,20 @@ import {
   CreditCard,
   Building,
   HelpCircle,
-  AlertCircle
+  AlertCircle,
+  ArrowLeft
 } from 'lucide-react';
 
 interface InstructorStudioProps {
   course: Course;
   onEnterLearningRoom: (course: Course) => void;
+  onBackToLearner?: () => void;
 }
 
 export const InstructorStudio: React.FC<InstructorStudioProps> = ({
   course,
-  onEnterLearningRoom
+  onEnterLearningRoom,
+  onBackToLearner
 }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'curriculum' | 'upload' | 'payouts'>('dashboard');
 
@@ -108,8 +111,19 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
 
   return (
     <div className="space-y-6 pb-16">
+      {/* Back button */}
+      {onBackToLearner && (
+        <button
+          onClick={onBackToLearner}
+          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-[#2c3e50] transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Quay lại trang học viên
+        </button>
+      )}
+
       {/* Studio Header Banner */}
-      <div className="bg-[#2c3e50] text-white p-6 md:p-8 rounded-3xl shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="bg-[#1e293b] text-white p-6 md:p-8 rounded-3xl shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full bg-[#e74c3c] text-white text-xs font-bold uppercase tracking-wider">

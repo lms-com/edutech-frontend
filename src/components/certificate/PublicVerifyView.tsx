@@ -124,9 +124,9 @@ export const PublicVerifyView: React.FC<PublicVerifyViewProps> = ({
               <div className="p-3 bg-slate-900 rounded-lg text-emerald-400 font-mono text-xs break-all select-all shadow-inner">
                 {certificate.qrCodeHash}
               </div>
-              <div className="text-[11px] text-slate-400 flex items-center justify-between">
-                <span>Endpoint: GET /notification-service/api/v1/certificates/verify/{'{hash}'}</span>
-                <span>Lưu trữ: MinIO Object Storage (Bucket: certificates)</span>
+              <div className="text-[11px] text-slate-500 flex items-center justify-between">
+                <span>Chứng nhận bởi: EduTech Certification Authority</span>
+                <span className="text-emerald-600 font-semibold">Trạng thái: Hợp lệ & Đã kích hoạt</span>
               </div>
             </div>
 

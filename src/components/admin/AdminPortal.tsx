@@ -15,14 +15,16 @@ import {
   Users, 
   Eye, 
   Send,
-  Sparkles
+  Sparkles,
+  ArrowLeft
 } from 'lucide-react';
 
 interface AdminPortalProps {
   onPreviewCourse: (course: Course) => void;
+  onBackToLearner?: () => void;
 }
 
-export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse }) => {
+export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBackToLearner }) => {
   const [activeTab, setActiveTab] = useState<'courses' | 'payouts' | 'devices'>('courses');
   const [coursesList, setCoursesList] = useState<Course[]>(MOCK_COURSES);
   const [payoutList, setPayoutList] = useState<PayoutRequest[]>(MOCK_PAYOUTS);
@@ -74,7 +76,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse }) => 
 
   const handleKickDevice = (deviceId: string) => {
     setDevicesList(prev => prev.filter(d => d.deviceId !== deviceId));
-    setActionSuccessMsg(`Đã thu hồi token phiên đăng nhập (DEL user:usr_vn_9824:device:${deviceId}) trên Redis.`);
+    setActionSuccessMsg(`Đã thu hồi phiên đăng nhập của thiết bị ${deviceId} thành công.`);
     setTimeout(() => setActionSuccessMsg(''), 4000);
   };
 
@@ -86,18 +88,29 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse }) => 
 
   return (
     <div className="space-y-6 pb-16">
+      {/* Back button */}
+      {onBackToLearner && (
+        <button
+          onClick={onBackToLearner}
+          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-[#2c3e50] transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Quay lại trang học viên
+        </button>
+      )}
+
       {/* Banner */}
-      <div className="bg-[#2c3e50] text-white p-6 md:p-8 rounded-3xl shadow-lg flex items-center justify-between">
+      <div className="bg-[#1e293b] text-white p-6 md:p-8 rounded-3xl shadow-lg flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full bg-emerald-600 text-white text-xs font-bold uppercase tracking-wider">
               Admin Portal
             </span>
-            <span className="text-xs text-slate-300 font-mono">Quyền hạn: SUPER_ADMIN</span>
+            <span className="text-xs text-slate-400 font-mono">Quyền hạn: SUPER_ADMIN</span>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight mt-1">Cổng Quản Trị & Vận Hành Hệ Thống Microservices</h1>
+          <h1 className="text-2xl font-bold tracking-tight mt-1">Cổng Quản Trị & Vận Hành Hệ Thống</h1>
           <p className="text-xs text-slate-300 mt-1">
-            Kiểm duyệt nội dung khóa học, phê duyệt thanh toán chiết khấu và quản trị bảo mật đa thiết bị (Redis Session).
+            Kiểm duyệt nội dung khóa học, phê duyệt thanh toán chiết khấu và quản lý phiên đăng nhập thiết bị.
           </p>
         </div>
       </div>

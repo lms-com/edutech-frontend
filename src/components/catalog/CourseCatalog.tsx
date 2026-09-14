@@ -1,16 +1,13 @@
 import React, { useState } from 'react';
-import { Course } from '../../types';
+import type { Course } from '../../types';
 import { 
   Search, 
-  Filter, 
   Star, 
   Clock, 
   BookOpen, 
   Award, 
   PlayCircle, 
-  Sparkles, 
   SlidersHorizontal,
-  ArrowRight,
   ShieldCheck
 } from 'lucide-react';
 
@@ -35,7 +32,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
     { id: 'ALL', name: 'Tất cả danh mục' },
     { id: 'Lập trình Backend', name: 'Lập trình Backend' },
     { id: 'DevOps & Cloud', name: 'DevOps & Cloud' },
-    { id: 'Kiến trúc Hệ thống', name: 'Kiến trúc Microservices' }
+    { id: 'Kiến trúc Hệ thống', name: 'Kiến trúc Hệ thống' }
   ];
 
   const filteredCourses = courses.filter(c => {
@@ -56,34 +53,31 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
   return (
     <div className="space-y-8 pb-12">
       {/* Hero Welcome Banner */}
-      <div className="bg-gradient-to-r from-[#2c3e50] via-[#1a252f] to-[#2c3e50] text-white rounded-3xl p-6 md:p-10 shadow-xl relative overflow-hidden">
+      <div className="bg-gradient-to-r from-[#1e293b] via-[#0f172a] to-[#1e293b] text-white rounded-3xl p-6 md:p-10 shadow-xl relative overflow-hidden">
         <div className="relative z-10 max-w-3xl space-y-3">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-semibold border border-emerald-500/30">
             <ShieldCheck className="w-4 h-4" />
-            Nền tảng Đào tạo Microservices Chuẩn Doanh Nghiệp
+            Nền tảng Đào tạo Chuyên sâu Chuẩn Doanh Nghiệp
           </div>
           <h1 className="text-2xl md:text-4xl font-extrabold tracking-tight leading-tight">
-            Khám phá Khóa học Kiến trúc Phân tán & Đám mây
+            Nâng tầm Kỹ năng Lập trình & Kiến trúc Hệ thống
           </h1>
           <p className="text-sm md:text-base text-slate-300 leading-relaxed">
-            Học bài giảng trực quan trong chế độ Cinema Mode, phát video HLS mã hóa AES-128, làm trắc nghiệm tương tác và nhận chứng chỉ xác thực mã QR số hóa.
+            Học tập qua video bài giảng chất lượng cao, thực hành các dự án kiến trúc phân tán thực tế, làm bài kiểm tra đánh giá năng lực và nhận chứng chỉ số hóa chính quy.
           </p>
 
           <div className="pt-2 flex flex-wrap items-center gap-3">
             <button
               onClick={() => onEnterLearningRoom(courses[0])}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#e74c3c] hover:bg-[#c0392b] text-white text-xs md:text-sm font-bold shadow-lg transition-all hover:scale-105"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#e74c3c] hover:bg-[#c0392b] text-white text-xs md:text-sm font-bold shadow-lg transition-all hover:scale-105 cursor-pointer"
             >
               <PlayCircle className="w-4 h-4" />
-              Vào phòng học ngay (Khóa mẫu Microservices)
+              Khám phá khóa học tiêu biểu
             </button>
-            <span className="text-xs text-slate-400">
-              *Tập trung luồng bài học & mở khóa chứng chỉ nhanh
-            </span>
           </div>
         </div>
 
-        {/* Decorative corner shape */}
+        {/* Decorative background shape */}
         <div className="absolute right-0 bottom-0 top-0 w-1/3 opacity-10 pointer-events-none flex items-center justify-center">
           <Award className="w-72 h-72 text-white" />
         </div>
@@ -98,7 +92,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Tìm kiếm khóa học, giảng viên, công nghệ..."
+            placeholder="Tìm kiếm khóa học, giảng viên, kỹ năng..."
             className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-xs md:text-sm focus:outline-none focus:border-[#2c3e50] focus:ring-1 focus:ring-[#2c3e50] bg-slate-50/50"
           />
         </div>
@@ -109,7 +103,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
             <button
               key={cat.id}
               onClick={() => setSelectedCategory(cat.id)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                 selectedCategory === cat.id
                   ? 'bg-[#2c3e50] text-white shadow-sm'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -138,7 +132,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                 setPriceFilter('ALL');
                 setMinRating(0);
               }}
-              className="text-[11px] text-[#e74c3c] hover:underline font-semibold"
+              className="text-[11px] text-[#e74c3c] hover:underline font-semibold cursor-pointer"
             >
               Đặt lại
             </button>
@@ -172,7 +166,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
             </label>
             <div className="space-y-1.5">
               {[
-                { key: 'ALL', label: 'Tất cả giá' },
+                { key: 'ALL', label: 'Tất cả mức giá' },
                 { key: 'PAID', label: 'Khóa có phí' },
                 { key: 'FREE', label: 'Khóa miễn phí' }
               ].map(item => (
@@ -216,19 +210,12 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
               ))}
             </div>
           </div>
-
-          {/* Microservices API Indicator */}
-          <div className="pt-4 border-t border-slate-100 text-[10px] text-slate-400 font-mono space-y-1">
-            <p>GET /course-service/api/v1/categories</p>
-            <p>GET /course-service/api/v1/courses</p>
-          </div>
         </div>
 
         {/* Course Cards Grid (Right 3 Cols) */}
         <div className="lg:col-span-3 space-y-4">
           <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
             <span>Tìm thấy <strong className="text-[#2c3e50]">{filteredCourses.length}</strong> khóa học phù hợp</span>
-            <span className="hidden sm:inline">Chuẩn HLS AES-128 & Chứng chỉ A4 QR Code</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -238,7 +225,10 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                 className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col group"
               >
                 {/* Thumbnail Container */}
-                <div className="relative aspect-video overflow-hidden bg-slate-900 cursor-pointer" onClick={() => onSelectCourse(course)}>
+                <div 
+                  className="relative aspect-video overflow-hidden bg-slate-900 cursor-pointer" 
+                  onClick={() => onSelectCourse(course)}
+                >
                   <img
                     src={course.thumbnail}
                     alt={course.title}
@@ -306,8 +296,8 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => onEnterLearningRoom(course)}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#2c3e50] hover:bg-[#1a252f] text-white text-xs font-bold shadow-sm transition-all hover:scale-105"
-                        title="Vào ngay phòng học Cinema Mode"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#2c3e50] hover:bg-[#1a252f] text-white text-xs font-bold shadow-sm transition-all hover:scale-105 cursor-pointer"
+                        title="Vào học ngay"
                       >
                         <PlayCircle className="w-3.5 h-3.5 text-[#e74c3c]" />
                         Học ngay

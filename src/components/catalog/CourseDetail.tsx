@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { Course } from '../../types';
 import { MOCK_REVIEWS } from '../../data/mockData';
+import orderApi from '../../api/orderApi';
 import { 
   Star, 
   Clock, 
@@ -31,9 +32,43 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
 }) => {
   const [expandedSection, setExpandedSection] = useState<string>(course.sections[0]?.id || '');
   const [playingTrailer, setPlayingTrailer] = useState(false);
+  const [promoCode, setPromoCode] = useState('');
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
 
   const formatVND = (num: number) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(num);
+  };
+
+  const handleCheckoutVNPay = async () => {
+    setIsCheckingOut(true);
+    try {
+      const response = await orderApi.createOrder({
+        items: [
+          {
+            courseId: course.id,
+            promotionCode: promoCode.trim() || undefined,
+          },
+        ],
+        paymentMethod: 'VNPAY',
+      });
+
+      if (response && response.paymentUrl) {
+        window.location.href = response.paymentUrl;
+      } else {
+        alert('Tạo đơn hàng thành công! Đang chuyển tiếp...');
+        onStartLearning(course);
+      }
+    } catch (err: any) {
+      console.warn('Lỗi kết nối Order Service hoặc chưa đăng nhập:', err);
+      const confirmDirect = window.confirm(
+        'Không thể kết nối đến Cổng thanh toán Order Service (:8080) hoặc bạn chưa đăng nhập tài khoản.\n\nBạn có muốn vào phòng học ngay để trải nghiệm bài giảng không?'
+      );
+      if (confirmDirect) {
+        onStartLearning(course);
+      }
+    } finally {
+      setIsCheckingOut(false);
+    }
   };
 
   return (
@@ -284,14 +319,48 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                 </p>
               </div>
 
-              {/* Primary CTA */}
-              <button
-                onClick={() => onStartLearning(course)}
-                className="w-full py-3.5 px-4 rounded-2xl bg-[#e74c3c] hover:bg-[#c0392b] text-white font-bold text-sm shadow-xl shadow-red-900/20 transition-all hover:scale-[1.02] flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <PlayCircle className="w-5 h-5" />
-                Vào phòng học ngay
-              </button>
+              {/* Promo Code Input */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Nhập mã giảm giá..."
+                  value={promoCode}
+                  onChange={(e) => setPromoCode(e.target.value)}
+                  className="flex-1 px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-[#e74c3c]"
+                />
+                <button
+                  type="button"
+                  className="px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                >
+                  Áp dụng
+                </button>
+              </div>
+
+              {/* Checkout CTA */}
+              <div className="space-y-2">
+                <button
+                  disabled={isCheckingOut}
+                  onClick={handleCheckoutVNPay}
+                  className="w-full py-3.5 px-4 rounded-2xl bg-[#e74c3c] hover:bg-[#c0392b] text-white font-bold text-sm shadow-xl shadow-red-900/20 transition-all hover:scale-[1.02] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isCheckingOut ? (
+                    <span>Đang kết nối cổng VNPay...</span>
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-5 h-5" />
+                      <span>Đăng ký học ngay (Thanh toán VNPay)</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => onStartLearning(course)}
+                  className="w-full py-2.5 px-4 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <PlayCircle className="w-4 h-4 text-[#e74c3c]" />
+                  <span>Học thử ngay (Bỏ qua thanh toán)</span>
+                </button>
+              </div>
 
               {/* Highlights Checklist */}
               <div className="space-y-2.5 pt-3 border-t border-slate-100 text-xs text-slate-600 font-medium">

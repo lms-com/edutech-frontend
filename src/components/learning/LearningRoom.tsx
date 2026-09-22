@@ -8,6 +8,7 @@ import {
   Sparkles, ShieldCheck, Check, Clock, BookOpen, Layers, CheckCheck
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import enrollmentApi from '../../api/enrollmentApi';
 
 interface LearningRoomProps {
   course: Course;
@@ -70,11 +71,19 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
     : 0;
   const isAllCompleted = progressPercent === 100;
 
-  // Handler when video reaches >= 90% or finishes
-  const handleLessonComplete = (lessonId: string) => {
+
+  // Handler when video reaches >= 80% or finishes
+  const handleLessonComplete = async (lessonId: string) => {
     if (!completedLessonIds.includes(lessonId)) {
       const nextCompleted = [...completedLessonIds, lessonId];
       setCompletedLessonIds(nextCompleted);
+
+      // Đồng bộ tiến độ lên Enrollment Service (:8080)
+      try {
+        await enrollmentApi.updateLessonProgress(lessonId, { isCompleted: true });
+      } catch {
+        // Fallback: Nếu backend offline thì lưu trên frontend
+      }
 
       // Check if this reaches 100%
       if (nextCompleted.length === totalLessonCount) {

@@ -55,15 +55,20 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
       if (response && response.paymentUrl) {
         window.location.href = response.paymentUrl;
       } else {
-        alert('Tạo đơn hàng thành công! Đang chuyển tiếp...');
-        onStartLearning(course);
+        const amountVND = (course.discountPrice || course.price) * 100;
+        const mockSearch = `?vnp_Amount=${amountVND}&vnp_BankCode=NCB&vnp_BankTranNo=VNP14892301&vnp_CardType=ATM&vnp_OrderInfo=${encodeURIComponent('Thanh toan khoa hoc ' + course.title)}&vnp_PayDate=20260927131500&vnp_ResponseCode=00&vnp_TmnCode=EDUTECH1&vnp_TransactionNo=14892301&vnp_TransactionStatus=00&vnp_TxnRef=ORD-${Date.now()}`;
+        window.location.search = mockSearch;
       }
     } catch (err: any) {
       console.warn('Lỗi kết nối Order Service hoặc chưa đăng nhập:', err);
-      const confirmDirect = window.confirm(
-        'Không thể kết nối đến Cổng thanh toán Order Service (:8080) hoặc bạn chưa đăng nhập tài khoản.\n\nBạn có muốn vào phòng học ngay để trải nghiệm bài giảng không?'
+      const isSimulate = window.confirm(
+        'Không thể kết nối đến Cổng thanh toán Order Service (:8080) do backend chưa khởi động.\n\nBạn có muốn [MÔ PHỎNG] thanh toán VNPay thành công để kiểm tra giao diện Kết Quả Thanh Toán không?\n\n• Bấm OK: Mô phỏng giao dịch VNPay thành công (vnp_ResponseCode=00)\n• Bấm Cancel: Bỏ qua và vào phòng học thử ngay.'
       );
-      if (confirmDirect) {
+      if (isSimulate) {
+        const amountVND = (course.discountPrice || course.price) * 100;
+        const mockSearch = `?vnp_Amount=${amountVND}&vnp_BankCode=NCB&vnp_BankTranNo=VNP14892301&vnp_CardType=ATM&vnp_OrderInfo=${encodeURIComponent('Thanh toan khoa hoc ' + course.title)}&vnp_PayDate=20260927131500&vnp_ResponseCode=00&vnp_TmnCode=EDUTECH1&vnp_TransactionNo=14892301&vnp_TransactionStatus=00&vnp_TxnRef=ORD-${Date.now()}`;
+        window.location.search = mockSearch;
+      } else {
         onStartLearning(course);
       }
     } finally {

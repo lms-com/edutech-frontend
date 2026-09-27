@@ -13,6 +13,9 @@ import { PublicVerifyView } from './components/certificate/PublicVerifyView';
 import { InstructorStudio } from './components/instructor/InstructorStudio';
 import { AdminPortal } from './components/admin/AdminPortal';
 import { AuthModal } from './components/auth/AuthModal';
+import { PaymentResultView } from './components/payment/PaymentResultView';
+import { parseVNPayCallback, cleanUrlQueryParams } from './utils/vnpayHelper';
+import type { VNPayPaymentResult } from './types';
 import courseApi from './api/courseApi';
 import notificationApi from './api/notificationApi';
 import confetti from 'canvas-confetti';
@@ -22,6 +25,7 @@ export default function App() {
   const [coursesList, setCoursesList] = useState<Course[]>(MOCK_COURSES);
   const [activeCourse, setActiveCourse] = useState<Course>(MOCK_COURSES[0]);
   const [detailCourse, setDetailCourse] = useState<Course | null>(null);
+  const [paymentResult, setPaymentResult] = useState<VNPayPaymentResult | null>(null);
   const [isInLearningRoom, setIsInLearningRoom] = useState<boolean>(false);
   const [showCertificateModal, setShowCertificateModal] = useState<boolean>(false);
   const [publicVerifyHash, setPublicVerifyHash] = useState<string>('');
@@ -94,6 +98,28 @@ export default function App() {
       };
     } catch {
       // Ignore SSE unsupported environments
+    }
+  }, []);
+
+  // 3. Tự động phát hiện và xử lý kết quả thanh toán từ VNPay Callback URL
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.search) {
+      const result = parseVNPayCallback(window.location.search);
+      if (result) {
+        setPaymentResult(result);
+        cleanUrlQueryParams();
+
+        // Tự động đẩy thông báo vào Notification Dropdown
+        const newNotif: NotificationItem = {
+          id: `pay_${Date.now()}`,
+          title: result.isSuccess ? 'Thanh toán thành công' : 'Thanh toán không thành công',
+          message: result.message,
+          type: 'PAYMENT',
+          timestamp: 'Vừa xong',
+          isRead: false,
+        };
+        setNotifications((prev) => [newNotif, ...prev]);
+      }
     }
   }, []);
 
@@ -248,7 +274,27 @@ export default function App() {
       {/* 3. Phân hệ Học viên (Learner Portal - Default) */}
       {currentPortal === 'learner' && (
         <MainLayout {...sharedHeaderProps}>
-          {detailCourse ? (
+          {paymentResult ? (
+            <PaymentResultView
+              result={paymentResult}
+              courseTitle={detailCourse?.title || activeCourse.title}
+              courseId={detailCourse?.id || activeCourse.id}
+              onStartLearning={(courseId) => {
+                const matched = coursesList.find((c) => c.id === courseId) || activeCourse;
+                setActiveCourse(matched);
+                setPaymentResult(null);
+                setDetailCourse(null);
+                setIsInLearningRoom(true);
+              }}
+              onRetry={() => {
+                setPaymentResult(null);
+              }}
+              onBackHome={() => {
+                setPaymentResult(null);
+                setDetailCourse(null);
+              }}
+            />
+          ) : detailCourse ? (
             <CourseDetail
               course={detailCourse}
               onBack={() => setDetailCourse(null)}

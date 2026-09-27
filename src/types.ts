@@ -129,4 +129,17 @@ export interface ReviewItem {
   comment: string;
 }
 
+export interface VNPayPaymentResult {
+  isSuccess: boolean;
+  responseCode: string;
+  orderId?: string;
+  amount?: number;
+  bankCode?: string;
+  transactionNo?: string;
+  cardType?: string;
+  payDate?: string;
+  orderInfo?: string;
+  message: string;
+}
+
 export * from './types/auth';

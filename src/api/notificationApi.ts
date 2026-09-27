@@ -1,4 +1,5 @@
 import axiosClient from './axiosClient';
+import { API_BASE_URL } from './config';
 
 export interface NotificationDto {
   id: string;
@@ -59,7 +60,7 @@ export const notificationApi = {
   // 6. Lấy đường dẫn kết nối SSE Realtime cho quả chuông
   getSseUrl: () => {
     const token = localStorage.getItem('access_token');
-    return `http://localhost:8080/notification-service/api/v1/notifications/subscribe${token ? `?token=${token}` : ''}`;
+    return `${API_BASE_URL}/notification-service/api/v1/notifications/subscribe${token ? `?token=${token}` : ''}`;
   },
 };
 

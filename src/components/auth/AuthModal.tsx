@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, LogIn, UserPlus, Laptop, Lock, Mail, User as UserIcon, 
-  AlertCircle, CheckCircle2, Sparkles, ArrowRight
+  AlertCircle, CheckCircle2, ArrowRight
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { authApi } from '../../api/authApi';
 import { getDeviceFingerprint } from '../../utils/fingerprint';
+import { landingPortal, primaryRoleLabel } from '../../utils/roles';
 import type { PortalType } from '../../types';
 
 interface AuthModalProps {
@@ -13,6 +14,35 @@ interface AuthModalProps {
   onClose: () => void;
   onSuccess?: (portal?: PortalType) => void;
 }
+
+// Mã lỗi nghiệp vụ do IAM trả về (ApiResponse.code) -> thông báo tiếng Việt
+const AUTH_ERROR_MESSAGES: Record<number, string> = {
+  2001: 'Email này chưa được đăng ký.',
+  2002: 'Mật khẩu không đúng.',
+  2003: 'Email này đã được sử dụng.',
+  2004: 'Mật khẩu không hợp lệ.',
+  2006: 'Không lấy được dấu vân tay thiết bị. Vui lòng tải lại trang.',
+  2008: 'Hệ thống chưa cấu hình vai trò mặc định. Liên hệ quản trị viên.',
+  2014: 'Tài khoản đang bị khoá.',
+  2015: 'Tài khoản đã bị vô hiệu hoá.',
+};
+
+/**
+ * axiosClient reject bằng body ApiResponse (đã bỏ lớp AxiosError) nên thông báo
+ * thật nằm ở err.message, còn lỗi mạng thì giữ nguyên AxiosError.
+ */
+const describeAuthError = (err: any, fallback: string): string => {
+  if (err?.code === 'ERR_NETWORK' || err?.message === 'Network Error') {
+    return 'Không kết nối được API Gateway (http://localhost:8080). Kiểm tra backend đã chạy chưa.';
+  }
+  if (typeof err?.code === 'number' && AUTH_ERROR_MESSAGES[err.code]) {
+    return AUTH_ERROR_MESSAGES[err.code];
+  }
+  if (typeof err?.message === 'string' && err.message.trim()) {
+    return err.message;
+  }
+  return fallback;
+};
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const [tab, setTab] = useState<'login' | 'register'>('login');
@@ -24,7 +54,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [fingerprint, setFingerprint] = useState<string>('');
 
-  const { setAuth } = useAuthStore();
+  const { setToken, fetchCurrentUser } = useAuthStore();
 
   useEffect(() => {
     if (isOpen) {
@@ -45,53 +75,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
 
     setLoading(true);
     setErrorMsg(null);
+    setSuccessMsg(null);
 
     try {
-      // 1. Thử gọi API thực tế tới Backend qua API Gateway (:8080)
       const res = await authApi.login({ email, password });
-      if (res && res.data) {
-        const { accessToken, userId, email: userEmail, permissions } = res.data;
-        const userObj = {
-          id: userId,
-          email: userEmail,
-          fullName: userEmail.split('@')[0],
-          roles: permissions || ['LEARNER']
-        };
-        setAuth(userObj, accessToken);
-        setSuccessMsg('Đăng nhập thành công qua API Gateway!');
-        setTimeout(() => {
-          onClose();
-          if (onSuccess) onSuccess('learner');
-        }, 600);
-        return;
-      }
-    } catch (err: any) {
-      // Nếu Backend chưa bật hoặc lỗi kết nối, hiển thị gợi ý và hỗ trợ fallback demo
-      console.warn('API Gateway offline hoặc đăng nhập thất bại:', err);
-      const isGatewayDown = !err.response || err.code === 'ERR_NETWORK';
-      
-      if (isGatewayDown) {
-        // Fallback login cho môi trường phát triển cục bộ khi backend chưa khởi động
-        const mockUser = {
-          id: `usr_${Math.random().toString(36).substring(2, 8)}`,
-          email: email,
-          fullName: email.includes('admin') ? 'Quản Trị Viên Hệ Thống' : email.includes('khoa') ? 'TS. Trần Minh Khoa' : 'Nguyễn Hoàng Long',
-          roles: email.includes('admin') ? ['ADMIN'] : email.includes('khoa') ? ['INSTRUCTOR'] : ['LEARNER']
-        };
-        setAuth(mockUser, `mock_jwt_token_${Date.now()}`);
-        setSuccessMsg('Đăng nhập chế độ Demo thành công (Backend Gateway offline)!');
-        setTimeout(() => {
-          onClose();
-          if (onSuccess) {
-            if (mockUser.roles.includes('ADMIN')) onSuccess('admin');
-            else if (mockUser.roles.includes('INSTRUCTOR')) onSuccess('instructor');
-            else onSuccess('learner');
-          }
-        }, 600);
+      const accessToken = res?.data?.accessToken;
+      if (!accessToken) {
+        setErrorMsg('Máy chủ không trả về token đăng nhập.');
         return;
       }
 
-      setErrorMsg(err.response?.data?.message || 'Đăng nhập không thành công. Kiểm tra lại thông tin.');
+      // Lưu token trước để /user/me gọi được, rồi lấy hồ sơ thật (fullName + roles)
+      setToken(accessToken);
+      const profile = await fetchCurrentUser();
+      if (!profile) {
+        setErrorMsg('Đăng nhập thành công nhưng không đọc được hồ sơ người dùng. Vui lòng thử lại.');
+        return;
+      }
+
+      const targetPortal = landingPortal(profile.roles);
+      setSuccessMsg(`Xin chào ${profile.fullName} — vai trò ${primaryRoleLabel(profile.roles)}.`);
+      setTimeout(() => {
+        onClose();
+        onSuccess?.(targetPortal);
+      }, 600);
+    } catch (err: any) {
+      setErrorMsg(describeAuthError(err, 'Đăng nhập không thành công. Vui lòng kiểm tra lại thông tin.'));
     } finally {
       setLoading(false);
     }
@@ -106,63 +115,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
 
     setLoading(true);
     setErrorMsg(null);
+    setSuccessMsg(null);
 
     try {
       const res = await authApi.register({ email, password, fullName });
-      if (res && res.data) {
-        setSuccessMsg('Đăng ký tài khoản thành công! Bạn có thể đăng nhập ngay.');
-        setTab('login');
-      }
-    } catch (err: any) {
-      const isGatewayDown = !err.response || err.code === 'ERR_NETWORK';
-      if (isGatewayDown) {
-        setSuccessMsg('Đăng ký thành công (Demo Mode). Hãy chuyển sang đăng nhập.');
-        setTab('login');
+      if (!res?.data) {
+        setErrorMsg('Máy chủ không xác nhận được việc tạo tài khoản.');
         return;
       }
-      setErrorMsg(err.response?.data?.message || 'Đăng ký thất bại. Vui lòng thử lại.');
+      setSuccessMsg('Đăng ký thành công! Hãy đăng nhập bằng tài khoản vừa tạo.');
+      setTab('login');
+    } catch (err: any) {
+      setErrorMsg(describeAuthError(err, 'Đăng ký thất bại. Vui lòng thử lại.'));
     } finally {
       setLoading(false);
     }
-  };
-
-  // Quick Demo Account Selection
-  const handleSelectDemo = (role: 'LEARNER' | 'INSTRUCTOR' | 'ADMIN') => {
-    let mockUser;
-    let targetPortal: PortalType = 'learner';
-
-    if (role === 'LEARNER') {
-      mockUser = {
-        id: 'usr_vn_9824',
-        email: 'long.nguyen@edutech.vn',
-        fullName: 'Nguyễn Hoàng Long',
-        roles: ['LEARNER']
-      };
-      targetPortal = 'learner';
-    } else if (role === 'INSTRUCTOR') {
-      mockUser = {
-        id: 'inst_01',
-        email: 'khoa.tran@edutech.vn',
-        fullName: 'TS. Trần Minh Khoa',
-        roles: ['INSTRUCTOR']
-      };
-      targetPortal = 'instructor';
-    } else {
-      mockUser = {
-        id: 'adm_01',
-        email: 'admin@edutech.vn',
-        fullName: 'Quản Trị Viên Hệ Thống',
-        roles: ['ADMIN']
-      };
-      targetPortal = 'admin';
-    }
-
-    setAuth(mockUser, `demo_jwt_token_${role.toLowerCase()}`);
-    setSuccessMsg(`Đã đăng nhập nhanh với vai trò ${role}!`);
-    setTimeout(() => {
-      onClose();
-      if (onSuccess) onSuccess(targetPortal);
-    }, 500);
   };
 
   return (
@@ -338,44 +305,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
               </button>
             </form>
           )}
-
-          {/* Quick Demo Switcher Section */}
-          <div className="mt-5 pt-4 border-t border-slate-100">
-            <div className="flex items-center justify-between mb-2.5">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                Đăng nhập nhanh (Tài khoản mẫu)
-              </span>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => handleSelectDemo('LEARNER')}
-                className="p-2 text-left bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 transition cursor-pointer"
-              >
-                <div className="text-[11px] font-bold text-[#2c3e50]">Học viên</div>
-                <div className="text-[10px] text-slate-400">Hoàng Long</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSelectDemo('INSTRUCTOR')}
-                className="p-2 text-left bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 transition cursor-pointer"
-              >
-                <div className="text-[11px] font-bold text-indigo-700">Giảng viên</div>
-                <div className="text-[10px] text-slate-400">TS. Minh Khoa</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSelectDemo('ADMIN')}
-                className="p-2 text-left bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 transition cursor-pointer"
-              >
-                <div className="text-[11px] font-bold text-emerald-700">Quản trị</div>
-                <div className="text-[10px] text-slate-400">Admin System</div>
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>

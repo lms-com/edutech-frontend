@@ -15,6 +15,8 @@ import { AdminPortal } from './components/admin/AdminPortal';
 import { AuthModal } from './components/auth/AuthModal';
 import { PaymentResultView } from './components/payment/PaymentResultView';
 import { parseVNPayCallback, cleanUrlQueryParams } from './utils/vnpayHelper';
+import { canAccessPortal } from './utils/roles';
+import { useAuthStore } from './stores/useAuthStore';
 import type { VNPayPaymentResult } from './types';
 import courseApi from './api/courseApi';
 import notificationApi from './api/notificationApi';
@@ -31,6 +33,25 @@ export default function App() {
   const [publicVerifyHash, setPublicVerifyHash] = useState<string>('');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>(MOCK_NOTIFICATIONS);
+
+  const fetchCurrentUser = useAuthStore(state => state.fetchCurrentUser);
+
+  // Khôi phục phiên đăng nhập từ token đã lưu để F5 không mất đăng nhập
+  useEffect(() => {
+    void fetchCurrentUser();
+  }, [fetchCurrentUser]);
+
+  /**
+   * Cổng duy nhất kiểm soát việc chuyển portal: vai trò không hợp lệ thì không vào được,
+   * dù bấm từ header, footer hay sau khi đăng nhập.
+   */
+  const handleSelectPortal = (portal: PortalType) => {
+    if (!canAccessPortal(useAuthStore.getState().user?.roles, portal)) {
+      return;
+    }
+    setCurrentPortal(portal);
+    setDetailCourse(null);
+  };
 
   // 1. Tải danh sách khóa học từ backend với fallback thông minh
   useEffect(() => {
@@ -224,10 +245,7 @@ export default function App() {
   // Shared handlers for Header across layouts
   const sharedHeaderProps = {
     currentPortal,
-    onSelectPortal: (portal: PortalType) => {
-      setCurrentPortal(portal);
-      setDetailCourse(null);
-    },
+    onSelectPortal: handleSelectPortal,
     onOpenLearningRoom: () => setIsInLearningRoom(true),
     onOpenCertificate: handleOpenCertificate,
     onOpenPublicVerify: () => handleOpenPublicVerify(),
@@ -330,7 +348,7 @@ export default function App() {
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         onSuccess={(targetPortal) => {
-          if (targetPortal) setCurrentPortal(targetPortal);
+          if (targetPortal) handleSelectPortal(targetPortal);
         }}
       />
     </>

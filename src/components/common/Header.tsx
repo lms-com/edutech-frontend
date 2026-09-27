@@ -3,6 +3,7 @@ import type { PortalType, NotificationItem } from '../../types';
 import { NotificationPopover } from './NotificationPopover';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { getDeviceFingerprint } from '../../utils/fingerprint';
+import { canAccessPortal, primaryRoleLabel } from '../../utils/roles';
 import { 
   GraduationCap, 
   Video, 
@@ -41,6 +42,10 @@ export const Header: React.FC<HeaderProps> = ({
   const { user, isAuthenticated, logout } = useAuthStore();
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [fingerprint, setFingerprint] = useState<string>('');
+
+  // Chỉ hiện lối vào những portal mà vai trò hiện tại được phép dùng
+  const showInstructorPortal = canAccessPortal(user?.roles, 'instructor');
+  const showAdminPortal = canAccessPortal(user?.roles, 'admin');
 
   useEffect(() => {
     getDeviceFingerprint().then(fp => setFingerprint(fp));
@@ -92,29 +97,33 @@ export const Header: React.FC<HeaderProps> = ({
               Khóa học
             </button>
 
-            <button
-              onClick={() => onSelectPortal('instructor')}
-              className={`px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
-                currentPortal === 'instructor'
-                  ? 'bg-slate-100 text-[#2c3e50] font-extrabold'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              <Video className={`w-4 h-4 ${currentPortal === 'instructor' ? 'text-indigo-600' : 'text-slate-400'}`} />
-              Giảng dạy
-            </button>
+            {showInstructorPortal && (
+              <button
+                onClick={() => onSelectPortal('instructor')}
+                className={`px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                  currentPortal === 'instructor'
+                    ? 'bg-slate-100 text-[#2c3e50] font-extrabold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <Video className={`w-4 h-4 ${currentPortal === 'instructor' ? 'text-indigo-600' : 'text-slate-400'}`} />
+                Giảng dạy
+              </button>
+            )}
 
-            <button
-              onClick={() => onSelectPortal('admin')}
-              className={`px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
-                currentPortal === 'admin'
-                  ? 'bg-slate-100 text-[#2c3e50] font-extrabold'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              <Shield className={`w-4 h-4 ${currentPortal === 'admin' ? 'text-emerald-600' : 'text-slate-400'}`} />
-              Quản trị
-            </button>
+            {showAdminPortal && (
+              <button
+                onClick={() => onSelectPortal('admin')}
+                className={`px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                  currentPortal === 'admin'
+                    ? 'bg-slate-100 text-[#2c3e50] font-extrabold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <Shield className={`w-4 h-4 ${currentPortal === 'admin' ? 'text-emerald-600' : 'text-slate-400'}`} />
+                Quản trị
+              </button>
+            )}
           </nav>
         </div>
 
@@ -152,8 +161,8 @@ export const Header: React.FC<HeaderProps> = ({
                   <span className="text-xs font-bold text-[#2c3e50] truncate max-w-[120px]">
                     {user.fullName || user.email}
                   </span>
-                  <span className="text-[10px] text-slate-400 font-medium capitalize">
-                    {user.roles?.[0]?.toLowerCase() || 'học viên'}
+                  <span className="text-[10px] text-slate-400 font-medium">
+                    {primaryRoleLabel(user.roles)}
                   </span>
                 </div>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden lg:block" />
@@ -179,20 +188,24 @@ export const Header: React.FC<HeaderProps> = ({
                       <BookOpen className="w-4 h-4 text-[#e74c3c]" />
                       Trang Học viên
                     </button>
-                    <button
-                      onClick={() => { setProfileDropdownOpen(false); onSelectPortal('instructor'); }}
-                      className="w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition cursor-pointer"
-                    >
-                      <Video className="w-4 h-4 text-indigo-600" />
-                      Studio Giảng viên
-                    </button>
-                    <button
-                      onClick={() => { setProfileDropdownOpen(false); onSelectPortal('admin'); }}
-                      className="w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition cursor-pointer"
-                    >
-                      <Shield className="w-4 h-4 text-emerald-600" />
-                      Cổng Quản trị Hệ thống
-                    </button>
+                    {showInstructorPortal && (
+                      <button
+                        onClick={() => { setProfileDropdownOpen(false); onSelectPortal('instructor'); }}
+                        className="w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition cursor-pointer"
+                      >
+                        <Video className="w-4 h-4 text-indigo-600" />
+                        Studio Giảng viên
+                      </button>
+                    )}
+                    {showAdminPortal && (
+                      <button
+                        onClick={() => { setProfileDropdownOpen(false); onSelectPortal('admin'); }}
+                        className="w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition cursor-pointer"
+                      >
+                        <Shield className="w-4 h-4 text-emerald-600" />
+                        Cổng Quản trị Hệ thống
+                      </button>
+                    )}
                   </div>
 
                   <div className="py-1">
@@ -233,25 +246,29 @@ export const Header: React.FC<HeaderProps> = ({
           Khóa học
         </button>
 
-        <button
-          onClick={() => onSelectPortal('instructor')}
-          className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors ${
-            currentPortal === 'instructor' ? 'bg-[#2c3e50] text-white' : 'text-slate-600'
-          }`}
-        >
-          <Video className="w-4 h-4" />
-          Giảng dạy
-        </button>
+        {showInstructorPortal && (
+          <button
+            onClick={() => onSelectPortal('instructor')}
+            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors ${
+              currentPortal === 'instructor' ? 'bg-[#2c3e50] text-white' : 'text-slate-600'
+            }`}
+          >
+            <Video className="w-4 h-4" />
+            Giảng dạy
+          </button>
+        )}
 
-        <button
-          onClick={() => onSelectPortal('admin')}
-          className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors ${
-            currentPortal === 'admin' ? 'bg-[#2c3e50] text-white' : 'text-slate-600'
-          }`}
-        >
-          <Shield className="w-4 h-4" />
-          Quản trị
-        </button>
+        {showAdminPortal && (
+          <button
+            onClick={() => onSelectPortal('admin')}
+            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors ${
+              currentPortal === 'admin' ? 'bg-[#2c3e50] text-white' : 'text-slate-600'
+            }`}
+          >
+            <Shield className="w-4 h-4" />
+            Quản trị
+          </button>
+        )}
 
         <button
           onClick={onOpenPublicVerify}

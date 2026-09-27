@@ -1,8 +1,9 @@
-﻿import axios from 'axios';
+import axios from 'axios';
 import { getDeviceFingerprint } from '../utils/fingerprint';
+import { API_BASE_URL } from './config';
 
 const axiosClient = axios.create({
-  baseURL: 'http://localhost:8080',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -35,11 +36,10 @@ axiosClient.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
-      console.warn('Phiên đăng nhập hết hạn hoặc bị kick khỏi thiết bị.');
-      localStorage.removeItem('access_token');
-      if (!window.location.pathname.includes('/login')) {
-        window.location.href = '/login';
-      }
+      // Token sai hoặc hết hạn. Không điều hướng cứng ở đây: app không có router
+      // nên chuyển trang sẽ nạp lại toàn bộ ứng dụng và làm mất state đang thao tác.
+      console.warn('Phiên đăng nhập không hợp lệ hoặc đã hết hạn.');
+      window.dispatchEvent(new Event('auth:unauthorized'));
     }
     return Promise.reject(error.response?.data || error);
   }

@@ -1,5 +1,7 @@
 import React from 'react';
 import { Header } from '../components/common/Header';
+import { useAuthStore } from '../stores/useAuthStore';
+import { canAccessPortal } from '../utils/roles';
 import type { PortalType, NotificationItem } from '../types';
 
 interface MainLayoutProps {
@@ -29,6 +31,9 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   onOpenAuthModal,
   children
 }) => {
+  const user = useAuthStore(state => state.user);
+  const showInstructorPortal = canAccessPortal(user?.roles, 'instructor');
+
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-800 flex flex-col font-sans">
       {/* 1. Header chuẩn hệ thống */}
@@ -90,12 +95,21 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
             <p className="text-xs text-slate-400 mb-3">
               Trở thành Giảng viên trên EduTech để chia sẻ tri thức và nhận phân bổ doanh thu minh bạch.
             </p>
-            <button
-              onClick={() => onSelectPortal('instructor')}
-              className="px-4 py-2 rounded-lg bg-[#e74c3c] hover:bg-[#c0392b] text-white text-xs font-semibold shadow-md transition-all cursor-pointer"
-            >
-              Mở Instructor Studio
-            </button>
+            {showInstructorPortal ? (
+              <button
+                onClick={() => onSelectPortal('instructor')}
+                className="px-4 py-2 rounded-lg bg-[#e74c3c] hover:bg-[#c0392b] text-white text-xs font-semibold shadow-md transition-all cursor-pointer"
+              >
+                Mở Instructor Studio
+              </button>
+            ) : (
+              <button
+                onClick={onOpenAuthModal}
+                className="px-4 py-2 rounded-lg border border-slate-600 hover:border-slate-400 text-slate-200 text-xs font-semibold transition-all cursor-pointer"
+              >
+                Đăng nhập bằng tài khoản giảng viên
+              </button>
+            )}
           </div>
         </div>
 

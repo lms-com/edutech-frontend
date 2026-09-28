@@ -23,7 +23,9 @@ export interface NotificationResponseDto {
 export interface CertificateResponseDto {
   id: string;
   learnerId: string;
+  learnerName?: string;
   courseId: string;
+  courseTitle?: string;
   enrollmentId?: string;
   qrCodeHash: string;
   pdfUrl?: string;
@@ -55,8 +57,8 @@ export const mapNotification = (dto: NotificationResponseDto): NotificationItem 
 });
 
 /**
- * Chứng chỉ của backend chỉ trả về ID (khóa học, học viên) chứ không trả tên.
- * Truyền thêm ngữ cảnh đã có sẵn ở giao diện để hiển thị, thiếu thì để rỗng.
+ * Backend đã trả kèm tên học viên và tên khóa học. `context` chỉ còn là phương án
+ * dự phòng khi iam-service hoặc course-service không phản hồi lúc làm giàu dữ liệu.
  */
 export const mapCertificate = (
   dto: CertificateResponseDto,
@@ -64,8 +66,8 @@ export const mapCertificate = (
 ): Certificate => ({
   id: dto.id,
   courseId: dto.courseId,
-  courseTitle: context.courseTitle ?? '',
-  studentName: context.studentName ?? '',
+  courseTitle: dto.courseTitle || context.courseTitle || '',
+  studentName: dto.learnerName || context.studentName || '',
   studentEmail: context.studentEmail ?? '',
   issueDate: formatDate(dto.issuedAt),
   qrCodeHash: dto.qrCodeHash,

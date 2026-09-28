@@ -64,26 +64,39 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
     return () => { cancelled = true; };
   }, [enrollment]);
 
-  // Q&A Comments State
-  const [qaComments, setQaComments] = useState<Array<{ id: string; author: string; avatar: string; time: string; text: string }>>([
-    {
-      id: 'qa_1',
-      author: 'Trần Văn Kiên',
-      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
-      time: '1 giờ trước',
-      text: 'Thầy cho em hỏi khi Spring Cloud Gateway chạy sau Nginx reverse proxy thì cấu hình ForwardedHeaderFilter thế nào để không bị mất client IP?'
-    },
-    {
-      id: 'qa_2',
-      author: 'TS. Trần Minh Khoa (Giảng viên)',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80',
-      time: '45 phút trước',
-      text: 'Chào Kiên! Em chỉ cần thêm bean XForwardedHeadersFilter trong GatewayConfig và thiết lập trust-proxy trên Nginx là Gateway sẽ nhận đúng IP gốc từ header X-Forwarded-For nhé.'
-    }
-  ]);
-  const [newQuestionText, setNewQuestionText] = useState('');
+  /**
+   * Khôi phục trạng thái "đã đạt" của từng bài kiểm tra từ lịch sử làm bài trên
+   * server. Trước đây chỉ giữ trong state nên F5 là mất, dù backend có lưu.
+   */
+  useEffect(() => {
+    if (!enrollment) return;
 
-  // Current lesson object
+    const quizIds = course.sections
+      .map(section => section.quiz?.id)
+      .filter((id): id is string => !!id);
+    if (quizIds.length === 0) return;
+
+    let cancelled = false;
+    void (async () => {
+      const passed = await Promise.all(quizIds.map(async quizId => {
+        try {
+          const attempts = await enrollmentApi.getQuizAttempts(enrollment.id, quizId);
+          return attempts.some(attempt => attempt.isPassed) ? quizId : null;
+        } catch (err) {
+          console.warn(`Không đọc được lịch sử làm bài của quiz ${quizId}:`, err);
+          return null;
+        }
+      }));
+      if (cancelled) return;
+      const passedIds = passed.filter((id): id is string => !!id);
+      if (passedIds.length > 0) {
+        setPassedQuizIds(prev => Array.from(new Set([...prev, ...passedIds])));
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [enrollment, course.sections]);
+
   const currentLesson = allLessons.find(l => l.id === currentLessonId) || allLessons[0];
   const currentLessonIndex = allLessons.findIndex(l => l.id === currentLessonId);
 
@@ -133,22 +146,6 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
       ...prev,
       [secId]: !prev[secId]
     }));
-  };
-
-  const handleAddQuestion = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newQuestionText.trim()) return;
-    setQaComments(prev => [
-      ...prev,
-      {
-        id: `qa_${Date.now()}`,
-        author: 'Nguyễn Hoàng Long (Học viên)',
-        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
-        time: 'Vừa xong',
-        text: newQuestionText.trim()
-      }
-    ]);
-    setNewQuestionText('');
   };
 
   const handleNextLesson = () => {
@@ -328,7 +325,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                 }`}
               >
                 <FileText className="w-3.5 h-3.5" />
-                Tài liệu MinIO ({currentLesson?.resources.length || 0})
+                Tài liệu ({currentLesson?.resources.length || 0})
               </button>
 
               <button
@@ -340,7 +337,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                 }`}
               >
                 <MessageSquare className="w-3.5 h-3.5" />
-                Hỏi đáp Q&A ({qaComments.length})
+                Hỏi đáp Q&A
               </button>
             </div>
 
@@ -363,10 +360,19 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                       Thông tin kỹ thuật Streaming Media:
                     </span>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-400 font-mono">
-                      <div>Media ID: <span className="text-slate-200">{currentLesson?.mediaId}</span></div>
-                      <div>Mã hóa: <span className="text-emerald-400">AES-128 HLS Segments</span></div>
-                      <div>Backend Service: <span className="text-slate-200">media-service:8082</span></div>
-                      <div>Tiến độ yêu cầu: <span className="text-amber-400">≥ 90% để ghi nhận hoàn thành</span></div>
+                      {/* Chỉ nói tới mã hoá khi bài học thực sự là luồng HLS mã hoá.
+                          Trước đây luôn ghi "AES-128 HLS" và "media-service:8082" dù
+                          dữ liệu thật không có thông tin đó. */}
+                      <div>
+                        Mã hóa:{' '}
+                        <span className={currentLesson?.isHlsEncrypted ? 'text-emerald-400' : 'text-slate-300'}>
+                          {currentLesson?.isHlsEncrypted ? 'AES-128 HLS' : 'Không (video thường)'}
+                        </span>
+                      </div>
+                      <div>
+                        Tiến độ yêu cầu:{' '}
+                        <span className="text-amber-400">≥ 80% để ghi nhận hoàn thành</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -374,84 +380,58 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
 
               {activeTab === 'resources' && (
                 <div className="space-y-3">
-                  <p className="text-xs text-slate-400">
-                    Tất cả tài liệu được lưu trữ bảo mật trên cụm phân tán MinIO Object Storage:
-                  </p>
-                  <div className="space-y-2">
-                    {currentLesson?.resources.map((res, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-slate-800 text-indigo-400 flex items-center justify-center text-xs font-bold">
-                            {res.type}
-                          </div>
-                          <div>
-                            <p className="font-semibold text-xs text-slate-200">{res.name}</p>
-                            <span className="text-[10px] text-slate-500">Dung lượng: {res.size}</span>
-                          </div>
-                        </div>
+                  {(currentLesson?.resources.length ?? 0) === 0 ? (
+                    <div className="p-6 bg-slate-900 rounded-xl border border-dashed border-slate-700 text-center space-y-2">
+                      <FileText className="w-8 h-8 text-slate-600 mx-auto" />
+                      <p className="text-xs font-semibold text-slate-300">Bài học này chưa có tài liệu đính kèm</p>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        Hệ thống chưa có API quản lý tài liệu cho bài học nên mục này luôn trống.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-xs text-slate-400">Tài liệu đính kèm của bài học:</p>
+                      <div className="space-y-2">
+                        {currentLesson?.resources.map((res, i) => (
+                          <div
+                            key={i}
+                            className="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition-colors"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-slate-800 text-indigo-400 flex items-center justify-center text-xs font-bold">
+                                {res.type}
+                              </div>
+                              <div>
+                                <p className="font-semibold text-xs text-slate-200">{res.name}</p>
+                                <span className="text-[10px] text-slate-500">Dung lượng: {res.size}</span>
+                              </div>
+                            </div>
 
-                        <a
-                          href={res.url}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            alert(`Bắt đầu tải file: ${res.name} qua MinIO Presigned URL an toàn.`);
-                          }}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors border border-slate-700"
-                        >
-                          <Download className="w-3.5 h-3.5 text-emerald-400" />
-                          Tải về
-                        </a>
+                            <a
+                              href={res.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors border border-slate-700"
+                            >
+                              <Download className="w-3.5 h-3.5 text-emerald-400" />
+                              Tải về
+                            </a>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    </>
+                  )}
                 </div>
               )}
 
               {activeTab === 'qa' && (
-                <div className="space-y-5">
-                  {/* List QA comments */}
-                  <div className="space-y-3">
-                    {qaComments.map(c => (
-                      <div key={c.id} className="p-3.5 bg-slate-900 rounded-xl border border-slate-800 space-y-1.5">
-                        <div className="flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-2">
-                            <img src={c.avatar} alt={c.author} className="w-6 h-6 rounded-full object-cover" />
-                            <span className="font-bold text-slate-200">{c.author}</span>
-                          </div>
-                          <span className="text-slate-500 text-[11px]">{c.time}</span>
-                        </div>
-                        <p className="text-xs text-slate-300 pl-8 leading-relaxed">
-                          {c.text}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Add question form */}
-                  <form onSubmit={handleAddQuestion} className="space-y-2 pt-2 border-t border-slate-800">
-                    <label className="block text-xs font-semibold text-slate-300">
-                      Đặt câu hỏi hoặc thảo luận cho giảng viên:
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={newQuestionText}
-                        onChange={e => setNewQuestionText(e.target.value)}
-                        placeholder="Nhập nội dung thắc mắc về bài học..."
-                        className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#e74c3c]"
-                      />
-                      <button
-                        type="submit"
-                        className="px-4 py-2 bg-[#e74c3c] hover:bg-[#c0392b] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
-                      >
-                        <Send className="w-3.5 h-3.5" />
-                        Gửi
-                      </button>
-                    </div>
-                  </form>
+                <div className="p-6 bg-slate-900 rounded-xl border border-dashed border-slate-700 text-center space-y-2">
+                  <MessageSquare className="w-8 h-8 text-slate-600 mx-auto" />
+                  <p className="text-xs font-semibold text-slate-300">Phần hỏi đáp chưa khả dụng</p>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    Hệ thống chưa có API thảo luận theo bài học, nên chưa thể hiển thị hay gửi câu hỏi.
+                    Trước đây mục này hiện một cuộc trò chuyện mẫu cho mọi khóa học.
+                  </p>
                 </div>
               )}
             </div>

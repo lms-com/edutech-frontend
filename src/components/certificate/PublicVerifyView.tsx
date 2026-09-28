@@ -142,16 +142,18 @@ export const PublicVerifyView: React.FC<PublicVerifyViewProps> = ({
                       <div>
                         <span className="text-xs text-slate-500 font-medium">Khóa học</span>
                         <p className="text-base font-bold text-[#2c3e50]">
-                          {certificate.courseTitle || certificate.courseId}
+                          {certificate.courseTitle || 'Không có thông tin'}
                         </p>
                       </div>
                     </div>
 
                     <div className="flex items-start gap-3">
-                      <Hash className="w-5 h-5 text-[#2c3e50] shrink-0 mt-0.5" />
+                      <ShieldCheck className="w-5 h-5 text-[#2c3e50] shrink-0 mt-0.5" />
                       <div>
-                        <span className="text-xs text-slate-500 font-medium">Mã học viên</span>
-                        <p className="text-sm font-mono text-slate-700">{certificate.id}</p>
+                        <span className="text-xs text-slate-500 font-medium">Học viên được cấp</span>
+                        <p className="text-base font-bold text-[#2c3e50]">
+                          {certificate.studentName || 'Không có thông tin'}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -162,6 +164,14 @@ export const PublicVerifyView: React.FC<PublicVerifyViewProps> = ({
                       <div>
                         <span className="text-xs text-slate-500 font-medium">Ngày cấp phát</span>
                         <p className="text-base font-semibold text-[#2c3e50]">{certificate.issueDate || '—'}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <Hash className="w-5 h-5 text-[#2c3e50] shrink-0 mt-0.5" />
+                      <div>
+                        <span className="text-xs text-slate-500 font-medium">Mã chứng chỉ</span>
+                        <p className="text-sm font-mono text-slate-700 break-all">{certificate.id}</p>
                       </div>
                     </div>
                   </div>

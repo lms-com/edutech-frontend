@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Play, Pause, Volume2, VolumeX, Maximize2, ShieldCheck, CheckCircle2, Sparkles, Video } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize2, ShieldCheck, CheckCircle2, Sparkles, Video, AlertCircle } from 'lucide-react';
 import Hls from 'hls.js';
 
 interface VideoPlayerProps {
@@ -31,6 +31,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [playbackRate, setPlaybackRate] = useState(1);
   const [progressPercent, setProgressPercent] = useState(0);
   const [completedTriggered, setCompletedTriggered] = useState(isCompleted);
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
 
   // Ngưỡng hoàn thành bài học theo đặc tả THẺ 6: tự động hoàn thành khi xem đạt từ 80%
   const COMPLETION_THRESHOLD = 80;
@@ -68,9 +69,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (data.fatal) {
-          console.warn('HLS stream encounter error, fallbacking to direct video:', data);
-          // Fallback to direct src if stream is offline
-          video.src = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+          // Báo lỗi thật cho người học. Trước đây chỗ này âm thầm chuyển sang phát
+          // một video mẫu của Google, nên hỏng luồng mà nhìn như đang chạy bình thường.
+          console.error('Luồng HLS gặp lỗi không phục hồi được:', data);
+          setPlaybackError('Không phát được video bài giảng. Vui lòng thử lại sau.');
         }
       });
 
@@ -189,6 +191,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
   return (
     <div className="relative rounded-2xl overflow-hidden bg-black shadow-2xl border border-slate-800 group">
+      {playbackError && (
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-2 bg-slate-950/85 px-6 text-center">
+          <AlertCircle className="w-8 h-8 text-rose-400" />
+          <p className="text-sm font-semibold text-slate-200">{playbackError}</p>
+          <button
+            onClick={() => {
+              setPlaybackError(null);
+              videoRef.current?.load();
+            }}
+            className="mt-1 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 cursor-pointer"
+          >
+            Thử lại
+          </button>
+        </div>
+      )}
+
       {/* AES-128 Encryption & Security Overlay Header */}
       <div className="absolute top-3 left-3 right-3 z-20 flex items-center justify-between pointer-events-none transition-opacity duration-300">
         {isEncrypted ? (

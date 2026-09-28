@@ -76,6 +76,9 @@ export interface ReviewResponseDto {
   enrollmentId?: string;
   courseId?: string;
   learnerId?: string;
+  /** Tên học viên do enrollment-service làm giàu từ iam-service. */
+  learnerName?: string;
+  learnerAvatar?: string;
   star?: number;
   comment?: string;
   createdAt?: string;
@@ -240,14 +243,14 @@ export const mapCourseDetail = (
 };
 
 /**
- * Backend không trả tên người đánh giá (chỉ learnerId). Hiển thị nhãn trung tính
- * thay vì bịa tên; muốn có tên thật thì enrollment-service phải làm giàu qua
- * iam-service, đúng cách nó đang làm cho learnerName của enrollment.
+ * enrollment-service đã làm giàu tên học viên từ iam-service. Nếu không lấy được,
+ * fallback của Feign client trả nhãn trung tính "Học viên" nên giao diện vẫn có
+ * chữ để hiển thị thay vì ô rỗng.
  */
 export const mapReview = (dto: ReviewResponseDto): ReviewItem => ({
   id: dto.id,
-  userName: 'Học viên',
-  userAvatar: '',
+  userName: dto.learnerName || 'Học viên',
+  userAvatar: dto.learnerAvatar ?? '',
   rating: Number(dto.star ?? 0),
   date: formatDate(dto.createdAt),
   comment: dto.comment ?? '',

@@ -239,7 +239,7 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Mobile Bottom Navigation Bar */}
       <div className="md:hidden flex items-center justify-around border-t border-slate-200 py-2 bg-white text-[11px] font-bold">
-        {showPublicCertificateLookup && <button
+        <button
           onClick={() => onSelectPortal('learner')}
           className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors ${
             currentPortal === 'learner' ? 'bg-[#2c3e50] text-white' : 'text-slate-600'
@@ -273,13 +273,15 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
+        {showPublicCertificateLookup && (
         <button
           onClick={onOpenPublicVerify}
           className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900"
         >
           <QrCode className="w-4 h-4" />
           Tra cứu
-        </button>}
+        </button>
+        )}
       </div>
     </header>
   );

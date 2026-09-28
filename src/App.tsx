@@ -62,6 +62,23 @@ export default function App() {
     void fetchCurrentUser();
   }, [fetchCurrentUser]);
 
+  // Signing out or a 401 must return staff portals to the learner shell and
+  // drop any cached access to a course that was open before the session ended.
+  useEffect(() => {
+    if (isAuthenticated) return;
+    setCurrentPortal('learner');
+    setSelectedInstructorCourse(null);
+    setActiveCourse(null);
+    setActiveEnrollment(null);
+    setIsInLearningRoom(false);
+    setIsLearningPreview(false);
+    setDetailCourse(null);
+    setPaymentCourse(null);
+    setPaymentResult(null);
+    setMyEnrollments([]);
+    setShowCertificateModal(false);
+  }, [isAuthenticated]);
+
   /**
    * Cổng duy nhất kiểm soát việc chuyển portal: vai trò không hợp lệ thì không vào được,
    * dù bấm từ header, footer hay sau khi đăng nhập.
@@ -544,6 +561,7 @@ export default function App() {
                 onBack={() => setDetailCourse(null)}
                 onStartLearning={enterLearningRoom}
                 onEnrollFreeCourse={enrollInFreeCourse}
+                onSelectRelatedCourse={openCourseDetail}
               />
             )
           ) : (

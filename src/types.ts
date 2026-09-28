@@ -99,7 +99,11 @@ export interface NotificationItem {
   id: string;
   title: string;
   message: string;
-  type: 'PAYMENT' | 'VIDEO_PROCESSED' | 'CERTIFICATE' | 'SYSTEM';
+  /**
+   * Phản chiếu enum NotificationType của backend:
+   * ORDER_COMPLETED | COURSE_APPROVED | COURSE_REJECTED | COURSE_COMPLETED | OTP_SENT
+   */
+  type: string;
   timestamp: string;
   isRead: boolean;
   link?: string;

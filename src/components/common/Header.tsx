@@ -24,7 +24,7 @@ interface HeaderProps {
   onOpenPublicVerify: () => void;
   notifications: NotificationItem[];
   onMarkAllAsRead: () => void;
-  onSimulateSSE: () => void;
+  onMarkAsRead?: (notificationId: string) => void;
   onSelectNotification?: (item: NotificationItem) => void;
   onOpenAuthModal?: () => void;
 }
@@ -35,7 +35,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenPublicVerify,
   notifications,
   onMarkAllAsRead,
-  onSimulateSSE,
+  onMarkAsRead,
   onSelectNotification,
   onOpenAuthModal
 }) => {
@@ -144,7 +144,7 @@ export const Header: React.FC<HeaderProps> = ({
             notifications={notifications}
             onMarkAllAsRead={onMarkAllAsRead}
             onSelectNotification={onSelectNotification}
-            onSimulateNewSSEEvent={onSimulateSSE}
+            onMarkAsRead={onMarkAsRead}
           />
 
           {/* User Profile avatar or Login CTA */}

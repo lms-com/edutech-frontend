@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { PortalType, Course, NotificationItem } from './types';
-import { MOCK_CERTIFICATE, MOCK_NOTIFICATIONS } from './data/mockData';
+import type { PortalType, Course, Certificate, NotificationItem } from './types';
 import { MainLayout } from './layouts/MainLayout';
 import { LearningLayout } from './layouts/LearningLayout';
 import { InstructorLayout } from './layouts/InstructorLayout';
@@ -21,8 +20,9 @@ import { useAuthStore } from './stores/useAuthStore';
 import type { VNPayPaymentResult } from './types';
 import courseApi from './api/courseApi';
 import notificationApi from './api/notificationApi';
+import { mapCertificate } from './api/mappers/notificationMapper';
 import enrollmentApi, { type EnrollmentDto } from './api/enrollmentApi';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, Award } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export default function App() {
@@ -42,9 +42,15 @@ export default function App() {
   const [showCertificateModal, setShowCertificateModal] = useState<boolean>(false);
   const [publicVerifyHash, setPublicVerifyHash] = useState<string>('');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
-  const [notifications, setNotifications] = useState<NotificationItem[]>(MOCK_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [notificationsError, setNotificationsError] = useState<string | null>(null);
+  const [certificates, setCertificates] = useState<Certificate[]>([]);
+  /** Chứng chỉ đang xem trước, chọn từ trang xác thực công khai. */
+  const [certificateForPreview, setCertificateForPreview] = useState<Certificate | null>(null);
 
   const fetchCurrentUser = useAuthStore(state => state.fetchCurrentUser);
+  const currentUser = useAuthStore(state => state.user);
+  const isAuthenticated = useAuthStore(state => state.isAuthenticated);
 
   // Khôi phục phiên đăng nhập từ token đã lưu để F5 không mất đăng nhập
   useEffect(() => {
@@ -154,57 +160,88 @@ export default function App() {
     return () => { cancelled = true; };
   }, [paymentResult, coursesList, coursesLoading]);
 
-  // 2. Tải thông báo & thiết lập luồng SSE Real-time
-  useEffect(() => {
-    const fetchNotifs = async () => {
-      try {
-        const notifs = await notificationApi.getNotifications();
-        if (notifs && Array.isArray(notifs) && notifs.length > 0) {
-          const mapped: NotificationItem[] = notifs.map((n: any) => ({
-            id: n.id,
-            title: n.title,
-            message: n.content,
-            type: n.type === 'ORDER_COMPLETED' ? 'PAYMENT' : 'SYSTEM',
-            timestamp: new Date(n.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
-            isRead: n.isRead,
-          }));
-          setNotifications(mapped);
-        }
-      } catch {
-        // Fallback: Dùng danh sách thông báo mẫu
-      }
-    };
-    fetchNotifs();
-
-    // Kết nối SSE nếu chạy môi trường có Gateway
+  const loadNotifications = useCallback(async () => {
+    if (!localStorage.getItem('access_token')) {
+      setNotifications([]);
+      return;
+    }
+    setNotificationsError(null);
     try {
-      const sseUrl = notificationApi.getSseUrl();
-      const eventSource = new EventSource(sseUrl);
-
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          const newNotif: NotificationItem = {
-            id: `sse_${Date.now()}`,
-            title: data.title || 'Thông báo mới',
-            message: data.content || data.message || '',
-            type: data.type || 'SYSTEM',
-            timestamp: 'Vừa xong',
-            isRead: false,
-          };
-          setNotifications(prev => [newNotif, ...prev]);
-        } catch {
-          // Ignore parse errors
-        }
-      };
-
-      return () => {
-        eventSource.close();
-      };
-    } catch {
-      // Ignore SSE unsupported environments
+      const page = await notificationApi.getNotifications();
+      setNotifications(page.items);
+    } catch (err: any) {
+      setNotificationsError(err?.message || 'Không tải được thông báo.');
+      setNotifications([]);
     }
   }, []);
+
+  // 2. Thông báo: nạp khi đã đăng nhập, và nạp lại khi phiên đăng nhập đổi
+  useEffect(() => {
+    void loadNotifications();
+  }, [loadNotifications, isAuthenticated]);
+
+  /**
+   * 3. Luồng SSE realtime.
+   * EventSource không gửi được header Authorization nên backend nhận định danh qua
+   * query param userId — trước đây gửi token nên luôn bị 400 và chuông không cập nhật.
+   */
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const eventSource = new EventSource(notificationApi.getSseUrl(currentUser.id));
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        // Sự kiện INIT chỉ là mở kết nối, không phải thông báo mới
+        if (!data?.title) return;
+        setNotifications(prev => [
+          {
+            id: data.id ?? `sse_${Date.now()}`,
+            title: data.title,
+            message: data.content ?? '',
+            type: data.type ?? '',
+            timestamp: 'Vừa xong',
+            isRead: false,
+          },
+          ...prev,
+        ]);
+      } catch {
+        // Bỏ qua sự kiện không parse được
+      }
+    };
+
+    eventSource.onerror = () => {
+      // EventSource tự thử kết nối lại; chỉ ghi log để không làm phiền người dùng
+      console.warn('Luồng thông báo realtime gián đoạn, đang thử kết nối lại...');
+    };
+
+    return () => eventSource.close();
+  }, [currentUser?.id]);
+
+  // 4. Chứng chỉ của tôi (cần đăng nhập)
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setCertificates([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const list = await notificationApi.getMyCertificates();
+        if (cancelled) return;
+        // Tên khóa học không có trong payload chứng chỉ nên bù từ danh sách đã tải
+        setCertificates(list.map(dto => mapCertificate(dto, {
+          courseTitle: coursesList.find(course => course.id === dto.courseId)?.title,
+          studentName: currentUser?.fullName,
+          studentEmail: currentUser?.email,
+        })));
+      } catch (err) {
+        if (!cancelled) console.warn('Không tải được chứng chỉ:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isAuthenticated, coursesList, currentUser?.fullName, currentUser?.email]);
 
   // 3. Tự động phát hiện và xử lý kết quả thanh toán từ VNPay Callback URL
   useEffect(() => {
@@ -228,62 +265,59 @@ export default function App() {
     }
   }, []);
 
-  const handleSimulateSSE = () => {
-    const sseEvents = [
-      {
-        title: 'Cấp chứng chỉ tốt nghiệp!',
-        message: 'Chứng chỉ khóa học của bạn đã sẵn sàng và được ký số SHA-256.',
-        type: 'CERTIFICATE' as const
-      },
-      {
-        title: 'Bài giảng mới đã sẵn sàng',
-        message: 'Hệ thống đã tối ưu hóa và xuất bản bài giảng mới cho khóa học của bạn.',
-        type: 'VIDEO_PROCESSED' as const
-      },
-      {
-        title: 'Xác nhận thanh toán thành công',
-        message: 'Giao dịch đăng ký khóa học đã được hệ thống ghi nhận thành công.',
-        type: 'PAYMENT' as const
-      }
-    ];
+  /**
+   * Điểm vào cho link QR trên chứng chỉ: /?verify=<qrCodeHash>
+   * Không có router nên đọc thẳng query param để mở trang xác thực công khai.
+   */
+  useEffect(() => {
+    const verifyHash = new URLSearchParams(window.location.search).get('verify');
+    if (!verifyHash) return;
+    setPublicVerifyHash(verifyHash);
+    setCurrentPortal('public_verify');
+    cleanUrlQueryParams();
+  }, []);
 
-    const randomEvent = sseEvents[Math.floor(Math.random() * sseEvents.length)];
-    const newNotif: NotificationItem = {
-      id: `notif_${Date.now()}`,
-      title: randomEvent.title,
-      message: randomEvent.message,
-      type: randomEvent.type,
-      timestamp: 'Vừa xong',
-      isRead: false
-    };
-
-    setNotifications(prev => [newNotif, ...prev]);
-  };
-
-  const handleMarkAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+  const handleMarkAllAsRead = async () => {
     try {
-      notificationApi.markAllAsRead();
-    } catch {
-      // Local state updated
+      await notificationApi.markAllAsRead();
+      setNotifications(prev => prev.map(item => ({ ...item, isRead: true })));
+    } catch (err: any) {
+      setNotificationsError(err?.message || 'Không đánh dấu được đã đọc.');
     }
   };
 
-  const handleOpenCertificate = () => {
-    setShowCertificateModal(true);
+  const handleMarkAsRead = async (notificationId: string) => {
     try {
-      confetti({
-        particleCount: 70,
-        spread: 60,
-        origin: { y: 0.4 }
-      });
-    } catch {
-      // Ignore
+      await notificationApi.markAsRead(notificationId);
+      setNotifications(prev =>
+        prev.map(item => (item.id === notificationId ? { ...item, isRead: true } : item)));
+    } catch (err) {
+      console.warn('Không đánh dấu đã đọc được:', err);
+    }
+  };
+
+  /** Chứng chỉ đang xét: ưu tiên khóa đang học, nếu không lấy cái mới nhất. */
+  const activeCertificate = certificates.find(cert => cert.courseId === activeCourse?.id)
+    ?? certificates[0]
+    ?? null;
+
+  const certificateToShow = certificateForPreview ?? activeCertificate;
+
+  const handleOpenCertificate = () => {
+    // Mở từ header thì bỏ chứng chỉ đang xem trước, quay về chứng chỉ của chính mình
+    setCertificateForPreview(null);
+    setShowCertificateModal(true);
+    if (activeCertificate) {
+      try {
+        confetti({ particleCount: 70, spread: 60, origin: { y: 0.4 } });
+      } catch {
+        // Bỏ qua nếu trình duyệt không hỗ trợ
+      }
     }
   };
 
   const handleOpenPublicVerify = (hash?: string) => {
-    setPublicVerifyHash(hash || MOCK_CERTIFICATE.qrCodeHash);
+    setPublicVerifyHash(hash ?? activeCertificate?.qrCodeHash ?? '');
     setCurrentPortal('public_verify');
     setShowCertificateModal(false);
   };
@@ -291,12 +325,24 @@ export default function App() {
   // Nếu đang ở trang xác thực chứng chỉ công khai (Không cần đăng nhập, toàn màn hình)
   if (currentPortal === 'public_verify') {
     return (
-      <PublicVerifyView
-        hash={publicVerifyHash || MOCK_CERTIFICATE.qrCodeHash}
-        certificate={MOCK_CERTIFICATE}
-        onBackToApp={() => setCurrentPortal('learner')}
-        onOpenCertificatePreview={() => setShowCertificateModal(true)}
-      />
+      <>
+        <PublicVerifyView
+          hash={publicVerifyHash}
+          onBackToApp={() => setCurrentPortal('learner')}
+          onOpenCertificatePreview={(found) => {
+            setCertificateForPreview(found);
+            setShowCertificateModal(true);
+          }}
+        />
+        {/* Modal phải render ngay trong nhánh này, nếu không nút xem bản gốc sẽ không mở được gì */}
+        {showCertificateModal && certificateToShow && (
+          <CertificateView
+            certificate={certificateToShow}
+            onClose={() => setShowCertificateModal(false)}
+            onOpenPublicVerify={handleOpenPublicVerify}
+          />
+        )}
+      </>
     );
   }
 
@@ -316,9 +362,9 @@ export default function App() {
           onOpenCertificate={handleOpenCertificate}
         />
 
-        {showCertificateModal && (
+        {showCertificateModal && certificateToShow && (
           <CertificateView
-            certificate={MOCK_CERTIFICATE}
+            certificate={certificateToShow}
             onClose={() => setShowCertificateModal(false)}
             onOpenPublicVerify={handleOpenPublicVerify}
           />
@@ -338,7 +384,7 @@ export default function App() {
     onOpenPublicVerify: () => handleOpenPublicVerify(),
     notifications,
     onMarkAllAsRead: handleMarkAllAsRead,
-    onSimulateSSE: handleSimulateSSE,
+    onMarkAsRead: handleMarkAsRead,
     onSelectNotification: (item: NotificationItem) => {
       if (item.type === 'CERTIFICATE') {
         handleOpenCertificate();
@@ -446,12 +492,30 @@ export default function App() {
       )}
 
       {/* Modal Chứng chỉ dùng chung */}
-      {showCertificateModal && (
+      {showCertificateModal && certificateToShow && (
         <CertificateView
-          certificate={MOCK_CERTIFICATE}
+          certificate={certificateToShow}
           onClose={() => setShowCertificateModal(false)}
           onOpenPublicVerify={handleOpenPublicVerify}
         />
+      )}
+
+      {showCertificateModal && !certificateToShow && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 text-center space-y-3">
+            <Award className="w-10 h-10 text-slate-300 mx-auto" />
+            <h3 className="font-bold text-[#2c3e50]">Bạn chưa có chứng chỉ nào</h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Chứng chỉ được cấp khi bạn hoàn thành 100% bài học của một khóa học đã ghi danh.
+            </p>
+            <button
+              onClick={() => setShowCertificateModal(false)}
+              className="px-4 py-2 rounded-xl bg-[#2c3e50] hover:bg-[#1a252f] text-white text-xs font-bold transition cursor-pointer"
+            >
+              Đóng
+            </button>
+          </div>
+        </div>
       )}
 
       {/* IAM Modal Đăng nhập / Đăng ký */}

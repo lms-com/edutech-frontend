@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { Course } from '../../types';
+import type { EnrollmentDto } from '../../api/enrollmentApi';
 import courseApi, { type CategoryDto } from '../../api/courseApi';
 import { CourseThumbnail } from '../common/CourseThumbnail';
 import { formatVND } from '../../utils/format';
@@ -22,6 +23,8 @@ interface CourseCatalogProps {
   onRetry?: () => void;
   onSelectCourse: (course: Course) => void;
   onEnterLearningRoom: (course: Course) => void;
+  enrollments?: EnrollmentDto[];
+  enrollmentsLoading?: boolean;
 }
 
 const LEVEL_OPTIONS = ['Tất cả trình độ', 'Cơ bản', 'Trung cấp', 'Nâng cao'];
@@ -32,7 +35,9 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
   error = null,
   onRetry,
   onSelectCourse,
-  onEnterLearningRoom
+  onEnterLearningRoom,
+  enrollments = [],
+  enrollmentsLoading = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState('ALL');
@@ -63,6 +68,9 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
    * Khi dữ liệu lớn phải chuyển lọc xuống server, nếu không sẽ lọc sai vì chỉ
    * nhìn thấy trang hiện tại.
    */
+  const activeEnrollments = enrollments.filter(item => item.status?.toUpperCase() === 'ACTIVE');
+  const enrolledCourseIds = new Set(activeEnrollments.map(item => item.courseId));
+  const myCourses = courses.filter(course => enrolledCourseIds.has(course.id));
   const filteredCourses = courses.filter(course => {
     const keyword = searchQuery.trim().toLowerCase();
     const matchSearch = keyword === '' ||
@@ -74,6 +82,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
       (priceFilter === 'FREE' ? course.price === 0 : course.price > 0);
     return matchSearch && matchCategory && matchLevel && matchPrice;
   });
+  const catalogCourses = filteredCourses.filter(course => !enrolledCourseIds.has(course.id));
 
   const resetFilters = () => {
     setSearchQuery('');
@@ -82,7 +91,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
     setPriceFilter('ALL');
   };
 
-  const featuredCourse = courses[0];
+  const featuredCourse = courses.find(course => !enrolledCourseIds.has(course.id)) ?? courses[0];
 
   return (
     <div className="space-y-8 pb-12">
@@ -117,6 +126,49 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
           <Award className="w-72 h-72 text-white" />
         </div>
       </div>
+
+      {/* Học viên chỉ thấy quyền học trong mục này sau khi ghi danh ACTIVE. */}
+      {(enrollmentsLoading || myCourses.length > 0) && (
+        <section className="space-y-4" aria-labelledby="my-courses-heading">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <h2 id="my-courses-heading" className="text-xl font-extrabold text-[#2c3e50]">Khóa học của tôi</h2>
+              <p className="text-xs text-slate-500 mt-1">Khóa học đã được kích hoạt quyền học</p>
+            </div>
+            <span className="text-xs font-semibold text-slate-500">{myCourses.length} khóa học</span>
+          </div>
+          {enrollmentsLoading ? (
+            <div className="flex items-center gap-2 p-5 bg-white rounded-2xl border border-slate-200 text-sm text-slate-500">
+              <Loader2 className="w-4 h-4 animate-spin" /> Đang tải quyền học...
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+              {myCourses.map(course => {
+                const enrollment = activeEnrollments.find(item => item.courseId === course.id);
+                return (
+                  <article key={course.id} className="bg-white rounded-2xl border border-emerald-200 overflow-hidden shadow-sm flex flex-col sm:flex-row">
+                    <CourseThumbnail src={course.thumbnail} alt={course.title} className="w-full sm:w-36 aspect-video sm:aspect-auto object-cover bg-slate-100" />
+                    <div className="p-4 flex-1 flex flex-col justify-between gap-3">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">Đã kích hoạt</span>
+                        <h3 className="text-sm font-bold text-[#2c3e50] mt-1 line-clamp-2">{course.title}</h3>
+                        <p className="text-[11px] text-slate-500 mt-1">Tiến độ: {enrollment?.completedRate ?? 0}%</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onEnterLearningRoom(course)}
+                        className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-[#2c3e50] hover:bg-[#1a252f] text-white text-xs font-bold cursor-pointer"
+                      >
+                        <PlayCircle className="w-4 h-4 text-[#e74c3c]" /> Tiếp tục học
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Search & Filter Header Bar */}
       <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
@@ -233,7 +285,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
             <span>
               {loading
                 ? 'Đang tải khóa học...'
-                : <>Tìm thấy <strong className="text-[#2c3e50]">{filteredCourses.length}</strong> khóa học phù hợp</>}
+                : <>Tìm thấy <strong className="text-[#2c3e50]">{catalogCourses.length}</strong> khóa học phù hợp</>}
             </span>
           </div>
 
@@ -265,16 +317,18 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
             </div>
           )}
 
-          {!loading && !error && filteredCourses.length === 0 && (
+          {!loading && !error && catalogCourses.length === 0 && (
             <div className="p-10 text-center text-sm text-slate-500 bg-white rounded-2xl border border-dashed border-slate-300">
               {courses.length === 0
                 ? 'Chưa có khóa học nào được xuất bản.'
-                : 'Không có khóa học nào khớp bộ lọc hiện tại.'}
+                : filteredCourses.length === 0
+                  ? 'Không có khóa học nào khớp bộ lọc hiện tại.'
+                : 'Bạn đã ghi danh tất cả khóa học khớp bộ lọc.'}
             </div>
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filteredCourses.map(course => (
+            {catalogCourses.map(course => (
               <div
                 key={course.id}
                 className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col group"
@@ -328,14 +382,6 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                       >
                         <BookOpen className="w-3.5 h-3.5 text-slate-500" />
                         Chi tiết
-                      </button>
-                      <button
-                        onClick={() => onEnterLearningRoom(course)}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#2c3e50] hover:bg-[#1a252f] text-white text-xs font-bold shadow-sm transition-all hover:scale-105 cursor-pointer"
-                        title="Vào phòng học"
-                      >
-                        <PlayCircle className="w-3.5 h-3.5 text-[#e74c3c]" />
-                        Học ngay
                       </button>
                     </div>
                   </div>

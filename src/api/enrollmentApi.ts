@@ -57,6 +57,14 @@ const getMyEnrollments = async (params?: { page?: number; size?: number }): Prom
   return unwrapPage(res);
 };
 
+/** Ghi danh khóa học miễn phí. Backend phải từ chối nếu khóa học có phí. */
+const enrollInFreeCourse = async (courseId: string): Promise<EnrollmentDto> => {
+  const res = await axiosClient.post<ApiEnvelope<EnrollmentDto>>(
+    `${ENROLLMENT_BASE}/enrollments/courses/${courseId}`,
+  );
+  return unwrap(res);
+};
+
 /** Lượt ghi danh của tôi cho một khóa học, null nếu chưa ghi danh. */
 const findMyEnrollmentForCourse = async (courseId: string): Promise<EnrollmentDto | null> => {
   const page = await getMyEnrollments();
@@ -131,6 +139,7 @@ const getQuizAttempts = async (enrollmentId: string, quizId: string): Promise<Qu
 
 export const enrollmentApi = {
   getMyEnrollments,
+  enrollInFreeCourse,
   findMyEnrollmentForCourse,
   getEnrollmentProgress,
   updateLessonProgress,

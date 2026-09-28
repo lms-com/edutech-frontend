@@ -10,6 +10,7 @@ import { LearningRoom } from './components/learning/LearningRoom';
 import { CertificateView } from './components/certificate/CertificateView';
 import { PublicVerifyView } from './components/certificate/PublicVerifyView';
 import { InstructorStudio } from './components/instructor/InstructorStudio';
+import { InstructorCourseManager } from './components/instructor/InstructorCourseManager';
 import { AdminPortal } from './components/admin/AdminPortal';
 import { AuthModal } from './components/auth/AuthModal';
 import { PaymentResultView } from './components/payment/PaymentResultView';
@@ -29,9 +30,12 @@ export default function App() {
   const [currentPortal, setCurrentPortal] = useState<PortalType>('learner');
   const [coursesList, setCoursesList] = useState<Course[]>([]);
   const [activeCourse, setActiveCourse] = useState<Course | null>(null);
+  const [selectedInstructorCourse, setSelectedInstructorCourse] = useState<Course | null>(null);
   const [detailCourse, setDetailCourse] = useState<Course | null>(null);
   const [coursesLoading, setCoursesLoading] = useState(true);
   const [coursesError, setCoursesError] = useState<string | null>(null);
+  const [myEnrollments, setMyEnrollments] = useState<EnrollmentDto[]>([]);
+  const [enrollmentsLoading, setEnrollmentsLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [courseCache, setCourseCache] = useState<Record<string, Course>>({});
@@ -39,6 +43,7 @@ export default function App() {
   const [activeEnrollment, setActiveEnrollment] = useState<EnrollmentDto | null>(null);
   const [paymentResult, setPaymentResult] = useState<VNPayPaymentResult | null>(null);
   const [isInLearningRoom, setIsInLearningRoom] = useState<boolean>(false);
+  const [isLearningPreview, setIsLearningPreview] = useState(false);
   const [showCertificateModal, setShowCertificateModal] = useState<boolean>(false);
   const [publicVerifyHash, setPublicVerifyHash] = useState<string>('');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
@@ -67,6 +72,7 @@ export default function App() {
     }
     setCurrentPortal(portal);
     setDetailCourse(null);
+    if (portal !== 'instructor') setSelectedInstructorCourse(null);
   };
 
   const loadCourses = useCallback(async () => {
@@ -87,6 +93,29 @@ export default function App() {
   useEffect(() => {
     void loadCourses();
   }, [loadCourses]);
+
+  const loadMyEnrollments = useCallback(async () => {
+    if (!isAuthenticated) {
+      setMyEnrollments([]);
+      setEnrollmentsLoading(false);
+      return;
+    }
+    setEnrollmentsLoading(true);
+    try {
+      const page = await enrollmentApi.getMyEnrollments({ size: 100 });
+      setMyEnrollments(page.items);
+    } catch (err) {
+      // Không suy diễn rằng người dùng có quyền học khi chưa xác nhận được enrollment.
+      setMyEnrollments([]);
+      console.warn('Không tải được danh sách khóa học đã ghi danh:', err);
+    } finally {
+      setEnrollmentsLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    void loadMyEnrollments();
+  }, [loadMyEnrollments]);
 
   /**
    * Bảo đảm có bản chi tiết (kèm chương/bài) trước khi hiển thị. Bản đã tải được
@@ -117,22 +146,53 @@ export default function App() {
     }
   };
 
-  const enterLearningRoom = async (course: Course) => {
+  const enterLearningRoom = async (course: Course, options: { preview?: boolean } = {}): Promise<boolean> => {
+    if (!options.preview && !isAuthenticated) {
+      setIsAuthModalOpen(true);
+      return false;
+    }
     try {
-      setActiveCourse(await ensureCourseDetail(course));
-
-      // Lượt ghi danh thật quyết định việc ghi nhận tiến độ và mở chứng chỉ
+      // Chỉ enrollment ACTIVE mới được vào học; preview của staff là chế độ chỉ xem.
       let enrollment: EnrollmentDto | null = null;
-      try {
+      if (!options.preview) {
         enrollment = await enrollmentApi.findMyEnrollmentForCourse(course.id);
-      } catch (err: any) {
-        // 401 là chưa đăng nhập: coi như chưa ghi danh, phòng học sẽ thông báo
-        if (err?.code !== 401) throw err;
+        if (enrollment?.status?.toUpperCase() !== 'ACTIVE') {
+          setCoursesError('Khóa học chưa được kích hoạt. Hãy hoàn tất thanh toán và chờ hệ thống ghi danh thành công.');
+          return false;
+        }
+        if (enrollment) {
+          setMyEnrollments(prev => [enrollment!, ...prev.filter(item => item.courseId !== course.id)]);
+        }
       }
+      // Chỉ tải cấu trúc chương/bài sau khi xác minh quyền học.
+      setActiveCourse(await ensureCourseDetail(course));
       setActiveEnrollment(enrollment);
+      setIsLearningPreview(!!options.preview);
       setIsInLearningRoom(true);
+      setCoursesError(null);
+      return true;
     } catch (err: any) {
       setCoursesError(err?.message || 'Không mở được phòng học.');
+      return false;
+    }
+  };
+
+  const enrollInFreeCourse = async (course: Course) => {
+    if (!isAuthenticated) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    const enrollment = await enrollmentApi.enrollInFreeCourse(course.id);
+    setMyEnrollments(prev => [enrollment, ...prev.filter(item => item.courseId !== course.id)]);
+    await enterLearningRoom(course);
+  };
+
+  const selectInstructorCourse = async (course: Course) => {
+    try {
+      setSelectedInstructorCourse(await ensureCourseDetail(course));
+    } catch (err: any) {
+      setCoursesError(err?.message || 'Không tải được nội dung khóa học.');
+      setSelectedInstructorCourse(course);
     }
   };
 
@@ -352,13 +412,14 @@ export default function App() {
       <LearningLayout
         courseTitle={activeCourse.title}
         progressPercent={activeEnrollment?.completedRate ?? 0}
-        onBack={() => setIsInLearningRoom(false)}
+        onBack={() => { setIsInLearningRoom(false); setIsLearningPreview(false); }}
         onOpenCertificate={handleOpenCertificate}
       >
         <LearningRoom
           course={activeCourse}
           enrollment={activeEnrollment}
-          onBack={() => setIsInLearningRoom(false)}
+          previewMode={isLearningPreview}
+          onBack={() => { setIsInLearningRoom(false); setIsLearningPreview(false); }}
           onOpenCertificate={handleOpenCertificate}
         />
 
@@ -378,7 +439,11 @@ export default function App() {
     currentPortal,
     onSelectPortal: handleSelectPortal,
     onOpenLearningRoom: () => {
-      if (activeCourse) setIsInLearningRoom(true);
+      if (activeCourse) {
+        void enterLearningRoom(activeCourse, {
+          preview: currentPortal === 'instructor' || currentPortal === 'admin',
+        });
+      }
     },
     onOpenCertificate: handleOpenCertificate,
     onOpenPublicVerify: () => handleOpenPublicVerify(),
@@ -393,24 +458,22 @@ export default function App() {
     onOpenAuthModal: () => setIsAuthModalOpen(true),
   };
 
-  /** Studio giảng viên hiện vẫn dùng dữ liệu mẫu và cần một khóa học để hiển thị. */
-  const instructorCourse = activeCourse ?? coursesList[0] ?? null;
-
   return (
     <>
       {/* 1. Phân hệ Giảng viên (Instructor Studio) */}
       {currentPortal === 'instructor' && (
         <InstructorLayout {...sharedHeaderProps}>
-          {instructorCourse ? (
+          {selectedInstructorCourse ? (
             <InstructorStudio
-              course={instructorCourse}
-              onEnterLearningRoom={enterLearningRoom}
-              onBackToLearner={() => handleSelectPortal('learner')}
+              course={selectedInstructorCourse}
+              onEnterLearningRoom={(course) => enterLearningRoom(course, { preview: true })}
+              onBackToCourseList={() => setSelectedInstructorCourse(null)}
             />
           ) : (
-            <div className="p-10 text-center text-sm text-slate-500">
-              Chưa có khóa học nào để hiển thị trong Studio.
-            </div>
+            <InstructorCourseManager
+              onSelectCourse={selectInstructorCourse}
+              onBackToLearner={() => handleSelectPortal('learner')}
+            />
           )}
         </InstructorLayout>
       )}
@@ -419,7 +482,7 @@ export default function App() {
       {currentPortal === 'admin' && (
         <AdminLayout {...sharedHeaderProps}>
           <AdminPortal
-            onPreviewCourse={enterLearningRoom}
+            onPreviewCourse={(course) => enterLearningRoom(course, { preview: true })}
             onBackToLearner={() => handleSelectPortal('learner')}
           />
         </AdminLayout>
@@ -434,13 +497,16 @@ export default function App() {
               courseTitle={paymentCourse?.title || 'Khóa học'}
               courseId={paymentCourse?.id || ''}
               onStartLearning={async () => {
-                clearPendingPurchase();
-                setPaymentResult(null);
-                setDetailCourse(null);
                 if (paymentCourse) {
-                  await enterLearningRoom(paymentCourse);
+                  const entered = await enterLearningRoom(paymentCourse);
+                  if (entered) {
+                    clearPendingPurchase();
+                    setPaymentResult(null);
+                    setDetailCourse(null);
+                  }
                 }
               }}
+              accessError={coursesError}
               onRetry={() => {
                 setPaymentResult(null);
                 clearPendingPurchase();
@@ -474,13 +540,17 @@ export default function App() {
             ) : (
               <CourseDetail
                 course={detailCourse}
+                isEnrolled={myEnrollments.some(item => item.courseId === detailCourse.id && item.status?.toUpperCase() === 'ACTIVE')}
                 onBack={() => setDetailCourse(null)}
                 onStartLearning={enterLearningRoom}
+                onEnrollFreeCourse={enrollInFreeCourse}
               />
             )
           ) : (
             <CourseCatalog
               courses={coursesList}
+              enrollments={myEnrollments}
+              enrollmentsLoading={enrollmentsLoading}
               loading={coursesLoading}
               error={coursesError}
               onRetry={loadCourses}

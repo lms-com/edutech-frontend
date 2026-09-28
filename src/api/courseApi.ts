@@ -28,6 +28,17 @@ export interface CourseFilterParams {
   sort?: string;
 }
 
+export interface CreateCoursePayload {
+  title: string;
+  slug: string;
+  categoryId: string;
+  description?: string;
+  thumbnailUrl?: string;
+  level?: string;
+  basePrice: number;
+  currencyCode?: string;
+}
+
 /** Danh sách danh mục thật từ DB (seed: Lập trình, Thiết kế, Java, Web Development). */
 const getCategories = async (): Promise<CategoryDto[]> => {
   const res = await axiosClient.get<ApiEnvelope<CategoryResponseDto[]>>(`${COURSE_BASE}/categories`);
@@ -38,6 +49,19 @@ const getCourses = async (params?: CourseFilterParams): Promise<PageResult<Cours
   const res = await axiosClient.get<ApiEnvelope<PageDto<CourseResponseDto>>>(`${COURSE_BASE}/courses`, { params });
   const page = unwrapPage(res);
   return { ...page, items: page.items.map(mapCourse) };
+};
+
+const getMyCourses = async (params?: CourseFilterParams): Promise<PageResult<Course>> => {
+  const res = await axiosClient.get<ApiEnvelope<PageDto<CourseResponseDto>>>(
+    `${COURSE_BASE}/courses/my-courses`, { params },
+  );
+  const page = unwrapPage(res);
+  return { ...page, items: page.items.map(mapCourse) };
+};
+
+const createCourse = async (payload: CreateCoursePayload): Promise<Course> => {
+  const res = await axiosClient.post<ApiEnvelope<CourseResponseDto>>(`${COURSE_BASE}/courses`, payload);
+  return mapCourse(unwrap(res));
 };
 
 /**
@@ -96,6 +120,8 @@ const getRelatedCourses = async (courseId: string): Promise<Course[]> => {
 export const courseApi = {
   getCategories,
   getCourses,
+  getMyCourses,
+  createCourse,
   getCatalogCourses,
   getCourseById,
   getQuizQuestions,

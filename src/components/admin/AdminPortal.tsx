@@ -42,7 +42,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBac
       }
       return c;
     }));
-    setActionSuccessMsg(`Đã duyệt khóa học ${courseId} sang trạng thái PUBLISHED thành công.`);
+    setActionSuccessMsg(`[Bản mẫu] Giao diện đổi ${courseId} sang PUBLISHED; trạng thái chưa được lưu lên máy chủ.`);
     setTimeout(() => setActionSuccessMsg(''), 4000);
   };
 
@@ -57,7 +57,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBac
       return c;
     }));
 
-    setActionSuccessMsg(`Đã từ chối khóa học ${rejectingCourseId}. Lý do từ chối đã được gửi qua email giảng viên.`);
+    setActionSuccessMsg(`[Bản mẫu] Giao diện đánh dấu ${rejectingCourseId} là REJECTED; lý do chưa được lưu hoặc gửi email.`);
     setRejectingCourseId(null);
     setRejectionNote('');
     setTimeout(() => setActionSuccessMsg(''), 4000);
@@ -70,19 +70,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBac
       }
       return p;
     }));
-    setActionSuccessMsg(`Đã phê duyệt lệnh rút tiền ${payoutId} qua cổng ngân hàng.`);
+    setActionSuccessMsg(`[Bản mẫu] Giao diện đổi ${payoutId} sang APPROVED; chưa có lệnh chuyển khoản nào được gửi.`);
     setTimeout(() => setActionSuccessMsg(''), 4000);
   };
 
   const handleKickDevice = (deviceId: string) => {
     setDevicesList(prev => prev.filter(d => d.deviceId !== deviceId));
-    setActionSuccessMsg(`Đã thu hồi phiên đăng nhập của thiết bị ${deviceId} thành công.`);
+    setActionSuccessMsg(`[Bản mẫu] Đã ẩn thiết bị ${deviceId} khỏi danh sách; phiên đăng nhập chưa bị thu hồi.`);
     setTimeout(() => setActionSuccessMsg(''), 4000);
   };
 
   const handleKickAllOtherDevices = () => {
     setDevicesList(prev => prev.filter(d => d.isCurrent));
-    setActionSuccessMsg('Đã đăng xuất toàn bộ thiết bị khác khỏi tài khoản.');
+    setActionSuccessMsg('[Bản mẫu] Danh sách thiết bị đã được lọc; chưa đăng xuất thiết bị nào.');
     setTimeout(() => setActionSuccessMsg(''), 4000);
   };
 
@@ -113,6 +113,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBac
             Kiểm duyệt nội dung khóa học, phê duyệt thanh toán chiết khấu và quản lý phiên đăng nhập thiết bị.
           </p>
         </div>
+      </div>
+
+      <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+        <strong>Chế độ giao diện mẫu:</strong> dữ liệu khóa học, yêu cầu chi trả và thiết bị hiện lấy từ dữ liệu giả. Các nút duyệt/từ chối/thu hồi chỉ đổi trạng thái trên màn hình, chưa gọi API và chưa thực hiện tác vụ thật.
       </div>
 
       {actionSuccessMsg && (

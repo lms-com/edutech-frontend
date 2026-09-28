@@ -25,12 +25,14 @@ interface InstructorStudioProps {
   course: Course;
   onEnterLearningRoom: (course: Course) => void;
   onBackToLearner?: () => void;
+  onBackToCourseList?: () => void;
 }
 
 export const InstructorStudio: React.FC<InstructorStudioProps> = ({
   course,
   onEnterLearningRoom,
-  onBackToLearner
+  onBackToLearner,
+  onBackToCourseList,
 }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'curriculum' | 'upload' | 'payouts'>('dashboard');
 
@@ -93,7 +95,7 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
     };
 
     setPayoutList([newReq, ...payoutList]);
-    setPayoutSuccessMsg(`Yêu cầu rút ${new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amountNum)} đã được gửi đến Admin Portal phê duyệt.`);
+    setPayoutSuccessMsg(`[Bản mẫu] Yêu cầu rút ${new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amountNum)} chỉ được thêm vào giao diện, chưa được gửi lên máy chủ.`);
     setTimeout(() => setPayoutSuccessMsg(''), 5000);
   };
 
@@ -112,6 +114,14 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
   return (
     <div className="space-y-6 pb-16">
       {/* Back button */}
+      {onBackToCourseList && (
+        <button
+          onClick={onBackToCourseList}
+          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-[#2c3e50] transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="w-4 h-4" /> Quay lại danh sách khóa học
+        </button>
+      )}
       {onBackToLearner && (
         <button
           onClick={onBackToLearner}
@@ -144,6 +154,10 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
           <Sparkles className="w-4 h-4 text-amber-300" />
           Xem thử dưới góc nhìn Học viên
         </button>
+      </div>
+
+      <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+        <strong>Lưu ý:</strong> tạo khóa học và tải danh sách khóa học dùng API; KPI, thêm chương trong studio, mô phỏng upload video và yêu cầu rút tiền hiện chưa được lưu hoặc gửi lên máy chủ.
       </div>
 
       {/* Tabs Switcher */}

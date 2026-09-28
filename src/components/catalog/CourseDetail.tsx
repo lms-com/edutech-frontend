@@ -22,19 +22,24 @@ import {
 
 interface CourseDetailProps {
   course: Course;
+  isEnrolled?: boolean;
   onBack: () => void;
   onStartLearning: (course: Course) => void;
+  onEnrollFreeCourse?: (course: Course) => Promise<void>;
 }
 
 export const CourseDetail: React.FC<CourseDetailProps> = ({
   course,
+  isEnrolled = false,
   onBack,
-  onStartLearning
+  onStartLearning,
+  onEnrollFreeCourse,
 }) => {
   const [expandedSection, setExpandedSection] = useState<string>(course.sections[0]?.id || '');
   const [promoCode, setPromoCode] = useState('');
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [isEnrollingFree, setIsEnrollingFree] = useState(false);
 
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
@@ -311,9 +316,11 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
             <div className="p-6 space-y-5">
               <div className="space-y-1">
                 <span className="text-2xl font-black text-[#e74c3c]">
-                  {formatVND(course.price)}
+                  {course.price > 0 ? formatVND(course.price) : 'Miễn phí'}
                 </span>
-                <p className="text-xs text-slate-500">Thanh toán một lần, truy cập trọn đời</p>
+                <p className="text-xs text-slate-500">
+                  {isEnrolled ? 'Bạn đã có quyền học khóa này.' : course.price > 0 ? 'Thanh toán một lần, truy cập trọn đời' : 'Ghi danh miễn phí để bắt đầu học.'}
+                </p>
               </div>
 
               <div className="flex gap-2">
@@ -334,28 +341,38 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
               )}
 
               <div className="space-y-2">
-                <button
-                  disabled={isCheckingOut}
-                  onClick={handleCheckoutVNPay}
-                  className="w-full py-3.5 px-4 rounded-2xl bg-[#e74c3c] hover:bg-[#c0392b] text-white font-bold text-sm shadow-xl shadow-red-900/20 transition-all hover:scale-[1.02] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  {isCheckingOut ? (
-                    <span>Đang tạo đơn hàng...</span>
-                  ) : (
-                    <>
-                      <ShieldCheck className="w-5 h-5" />
-                      <span>Đăng ký học ngay (Thanh toán VNPay)</span>
-                    </>
-                  )}
-                </button>
-
-                <button
-                  onClick={() => onStartLearning(course)}
-                  className="w-full py-2.5 px-4 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <PlayCircle className="w-4 h-4 text-[#e74c3c]" />
-                  <span>Vào phòng học</span>
-                </button>
+                {isEnrolled ? (
+                  <button
+                    onClick={() => onStartLearning(course)}
+                    className="w-full py-3.5 px-4 rounded-2xl bg-[#2c3e50] hover:bg-[#1a252f] text-white font-bold text-sm shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <PlayCircle className="w-5 h-5 text-[#e74c3c]" />
+                    <span>Tiếp tục học</span>
+                  </button>
+                ) : course.price > 0 ? (
+                  <button
+                    disabled={isCheckingOut}
+                    onClick={handleCheckoutVNPay}
+                    className="w-full py-3.5 px-4 rounded-2xl bg-[#e74c3c] hover:bg-[#c0392b] text-white font-bold text-sm shadow-xl shadow-red-900/20 transition-all hover:scale-[1.02] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {isCheckingOut ? <span>Đang tạo đơn hàng...</span> : <><ShieldCheck className="w-5 h-5" /><span>Đăng ký và thanh toán VNPay</span></>}
+                  </button>
+                ) : (
+                  <button
+                    disabled={isEnrollingFree || !onEnrollFreeCourse}
+                    onClick={async () => {
+                      if (!onEnrollFreeCourse) return;
+                      setIsEnrollingFree(true);
+                      setCheckoutError(null);
+                      try { await onEnrollFreeCourse(course); }
+                      catch (err: any) { setCheckoutError(err?.message || 'Không thể ghi danh khóa học.'); }
+                      finally { setIsEnrollingFree(false); }
+                    }}
+                    className="w-full py-3.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {isEnrollingFree ? 'Đang ghi danh...' : 'Ghi danh miễn phí'}
+                  </button>
+                )}
               </div>
 
               <div className="space-y-2.5 pt-3 border-t border-slate-100 text-xs text-slate-600 font-medium">

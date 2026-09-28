@@ -14,6 +14,8 @@ interface LearningRoomProps {
   course: Course;
   /** Lượt ghi danh thật của người dùng cho khóa học này; null nghĩa là chưa ghi danh. */
   enrollment: EnrollmentDto | null;
+  /** Chế độ xem trước dành cho giảng viên/quản trị, không ghi tiến độ hoặc làm quiz. */
+  previewMode?: boolean;
   onBack: () => void;
   onOpenCertificate: () => void;
 }
@@ -21,6 +23,7 @@ interface LearningRoomProps {
 export const LearningRoom: React.FC<LearningRoomProps> = ({
   course,
   enrollment,
+  previewMode = false,
   onBack,
   onOpenCertificate
 }) => {
@@ -224,7 +227,15 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
       </header>
 
       {/* Trạng thái ghi danh và tiến độ */}
-      {!enrollment && (
+      {previewMode && (
+        <div className="max-w-7xl w-full mx-auto px-3 md:px-6 pt-4">
+          <div className="p-3 bg-sky-950/40 border border-sky-700/50 rounded-xl text-xs text-sky-200 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>Đang xem trước khóa học. Tiến độ, bài kiểm tra và chứng chỉ của học viên không được ghi nhận ở chế độ này.</span>
+          </div>
+        </div>
+      )}
+      {!enrollment && !previewMode && (
         <div className="max-w-7xl w-full mx-auto px-3 md:px-6 pt-4">
           <div className="p-3 bg-amber-950/40 border border-amber-700/50 rounded-xl text-xs text-amber-200 flex items-start gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -535,12 +546,14 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  if (previewMode) return;
                                   if (isDone) {
                                     setCompletedLessonIds(prev => prev.filter(id => id !== lesson.id));
                                   } else {
                                     handleLessonComplete(lesson.id);
                                   }
                                 }}
+                                disabled={previewMode}
                                 className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
                                   isDone
                                     ? 'bg-[#27ae60] text-white'
@@ -559,8 +572,8 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                           const isQuizPassed = passedQuizIds.includes(section.quiz!.id);
                           return (
                             <div
-                              onClick={() => setActiveQuiz(section.quiz!)}
-                              className={`px-3 py-2.5 flex items-center justify-between gap-3 cursor-pointer transition-colors bg-amber-950/20 hover:bg-amber-900/30 border-l-4 ${
+                              onClick={() => { if (!previewMode) setActiveQuiz(section.quiz!); }}
+                              className={`px-3 py-2.5 flex items-center justify-between gap-3 transition-colors bg-amber-950/20 hover:bg-amber-900/30 border-l-4 ${previewMode ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'} ${
                                 isQuizPassed ? 'border-emerald-500' : 'border-amber-500'
                               }`}
                             >
@@ -604,7 +617,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
       </div>
 
       {/* Quiz Modal if open */}
-      {activeQuiz && (
+      {activeQuiz && !previewMode && (
         <QuizModal
           quiz={activeQuiz}
           enrollmentId={enrollment?.id ?? null}

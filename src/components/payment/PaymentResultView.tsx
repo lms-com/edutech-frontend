@@ -21,6 +21,7 @@ interface PaymentResultViewProps {
   courseTitle?: string;
   courseId?: string;
   onStartLearning: (courseId?: string) => void;
+  accessError?: string | null;
   onRetry: () => void;
   onBackHome: () => void;
 }
@@ -30,6 +31,7 @@ export const PaymentResultView: React.FC<PaymentResultViewProps> = ({
   courseTitle,
   courseId,
   onStartLearning,
+  accessError,
   onRetry,
   onBackHome,
 }) => {
@@ -206,9 +208,9 @@ export const PaymentResultView: React.FC<PaymentResultViewProps> = ({
                 <ShieldCheck className="w-4 h-4" />
               </div>
               <div className="text-xs text-emerald-950 space-y-1">
-                <p className="font-bold">Quyền học tập đã được kích hoạt thành công!</p>
+                <p className="font-bold">Cổng thanh toán trả kết quả thành công</p>
                 <p className="text-emerald-800 leading-relaxed">
-                  Tài khoản của bạn đã được ghi danh tự động vào khóa học. Tiến độ học và chứng chỉ tốt nghiệp sẽ được lưu trữ vĩnh viễn trên hệ thống.
+                  Hệ thống đang xác nhận ghi danh. Bạn chỉ có thể vào học sau khi quyền học được kích hoạt.
                 </p>
               </div>
             </div>
@@ -216,6 +218,11 @@ export const PaymentResultView: React.FC<PaymentResultViewProps> = ({
 
           {/* Action CTAs */}
           <div className="space-y-3 pt-2">
+            {accessError && result.isSuccess && (
+              <div role="status" className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
+                {accessError}
+              </div>
+            )}
             {result.isSuccess ? (
               <button
                 type="button"

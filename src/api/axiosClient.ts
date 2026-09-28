@@ -41,7 +41,11 @@ instance.interceptors.response.use(
       console.warn('Phiên đăng nhập không hợp lệ hoặc đã hết hạn.');
       window.dispatchEvent(new Event('auth:unauthorized'));
     }
-    return Promise.reject(error.response?.data || error);
+    const failure = error.response?.data ?? error;
+    if (failure && typeof failure === 'object' && error.response?.status) {
+      Object.assign(failure, { status: error.response.status });
+    }
+    return Promise.reject(failure);
   }
 );
 

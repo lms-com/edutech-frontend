@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Course, PayoutRequest, DeviceSession } from '../../types';
-import { MOCK_COURSES, MOCK_PAYOUTS, MOCK_DEVICES } from '../../data/mockData';
+import { MOCK_PAYOUTS, MOCK_DEVICES } from '../../data/mockData';
+import courseApi from '../../api/courseApi';
 import { 
   Shield, 
   CheckCircle, 
@@ -26,7 +27,10 @@ interface AdminPortalProps {
 
 export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBackToLearner }) => {
   const [activeTab, setActiveTab] = useState<'courses' | 'payouts' | 'devices'>('courses');
-  const [coursesList, setCoursesList] = useState<Course[]>(MOCK_COURSES);
+  const [coursesList, setCoursesList] = useState<Course[]>([]);
+  const [coursesLoading, setCoursesLoading] = useState(true);
+  const [coursesError, setCoursesError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
   const [payoutList, setPayoutList] = useState<PayoutRequest[]>(MOCK_PAYOUTS);
   const [devicesList, setDevicesList] = useState<DeviceSession[]>(MOCK_DEVICES);
 
@@ -35,32 +39,58 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBac
   const [rejectionNote, setRejectionNote] = useState('');
   const [actionSuccessMsg, setActionSuccessMsg] = useState('');
 
-  const handleApproveCourse = (courseId: string) => {
-    setCoursesList(prev => prev.map(c => {
-      if (c.id === courseId) {
-        return { ...c, status: 'PUBLISHED' as const };
-      }
-      return c;
-    }));
-    setActionSuccessMsg(`[Bản mẫu] Giao diện đổi ${courseId} sang PUBLISHED; trạng thái chưa được lưu lên máy chủ.`);
-    setTimeout(() => setActionSuccessMsg(''), 4000);
+  const loadPendingCourses = useCallback(async () => {
+    setCoursesLoading(true);
+    setCoursesError(null);
+    try {
+      const page = await courseApi.getAdminCourses({ size: 100, status: 'PENDING' });
+      setCoursesList(page.items);
+    } catch (err: any) {
+      setCoursesError(err?.message || 'Không tải được hàng chờ kiểm duyệt.');
+      setCoursesList([]);
+    } finally {
+      setCoursesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void loadPendingCourses(); }, [loadPendingCourses]);
+
+  const handleApproveCourse = async (courseId: string) => {
+    setActionLoading(true);
+    setCoursesError(null);
+    try {
+      await courseApi.approveCourse(courseId);
+      setActionSuccessMsg(`Đã duyệt khóa học ${courseId}.`);
+      await loadPendingCourses();
+      setTimeout(() => setActionSuccessMsg(''), 4000);
+    } catch (err: any) {
+      setCoursesError(err?.status === 403
+        ? 'Tài khoản hiện tại không có quyền kiểm duyệt khóa học.'
+        : err?.message || 'Không duyệt được khóa học.');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  const handleRejectCourse = (e: React.FormEvent) => {
+  const handleRejectCourse = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!rejectionNote.trim() || !rejectingCourseId) return;
-
-    setCoursesList(prev => prev.map(c => {
-      if (c.id === rejectingCourseId) {
-        return { ...c, status: 'REJECTED' as const, rejectionNote: rejectionNote.trim() };
-      }
-      return c;
-    }));
-
-    setActionSuccessMsg(`[Bản mẫu] Giao diện đánh dấu ${rejectingCourseId} là REJECTED; lý do chưa được lưu hoặc gửi email.`);
-    setRejectingCourseId(null);
-    setRejectionNote('');
-    setTimeout(() => setActionSuccessMsg(''), 4000);
+    setActionLoading(true);
+    setCoursesError(null);
+    try {
+      await courseApi.rejectCourse(rejectingCourseId, rejectionNote.trim());
+      setActionSuccessMsg(`Đã từ chối khóa học ${rejectingCourseId}.`);
+      setRejectingCourseId(null);
+      setRejectionNote('');
+      await loadPendingCourses();
+      setTimeout(() => setActionSuccessMsg(''), 4000);
+    } catch (err: any) {
+      setCoursesError(err?.status === 403
+        ? 'Tài khoản hiện tại không có quyền kiểm duyệt khóa học.'
+        : err?.message || 'Không từ chối được khóa học.');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleApprovePayout = (payoutId: string) => {
@@ -116,8 +146,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBac
       </div>
 
       <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
-        <strong>Chế độ giao diện mẫu:</strong> dữ liệu khóa học, yêu cầu chi trả và thiết bị hiện lấy từ dữ liệu giả. Các nút duyệt/từ chối/thu hồi chỉ đổi trạng thái trên màn hình, chưa gọi API và chưa thực hiện tác vụ thật.
+        <strong>Trạng thái tích hợp:</strong> hàng chờ kiểm duyệt và thao tác duyệt/từ chối dùng API thật. Yêu cầu chi trả và phiên thiết bị vẫn là dữ liệu mẫu; nút ở hai tab đó chưa thực hiện tác vụ trên máy chủ.
       </div>
+
+      {coursesError && (
+        <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">{coursesError}</div>
+      )}
 
       {actionSuccessMsg && (
         <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-2xl text-xs md:text-sm font-semibold text-emerald-800 flex items-center gap-2">
@@ -151,7 +185,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBac
       {/* TAB 1: COURSE MODERATION */}
       {activeTab === 'courses' && (
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-          <h3 className="font-bold text-base text-[#2c3e50]">Danh Sách Khóa Học Chờ Phê Duyệt (Status: PENDING / ALL)</h3>
+          <h3 className="font-bold text-base text-[#2c3e50]">Danh Sách Khóa Học Chờ Phê Duyệt</h3>
+          {coursesLoading ? (
+            <p className="py-8 text-center text-sm text-slate-500">Đang tải hàng chờ kiểm duyệt...</p>
+          ) : coursesList.length === 0 && !coursesError ? (
+            <p className="py-8 text-center text-sm text-slate-500">Hiện không có khóa học chờ duyệt.</p>
+          ) : (
           <div className="border border-slate-200 rounded-xl overflow-hidden">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
@@ -201,7 +240,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBac
                         {c.status === 'PENDING' && (
                           <>
                             <button
-                              onClick={() => handleApproveCourse(c.id)}
+                          onClick={() => handleApproveCourse(c.id)}
+                              disabled={actionLoading}
                               className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1"
                             >
                               <CheckCircle className="w-3.5 h-3.5" />
@@ -210,6 +250,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBac
 
                             <button
                               onClick={() => setRejectingCourseId(c.id)}
+                              disabled={actionLoading}
                               className="px-2.5 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center gap-1"
                             >
                               <XCircle className="w-3.5 h-3.5" />
@@ -224,6 +265,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBac
               </tbody>
             </table>
           </div>
+          )}
         </div>
       )}
 

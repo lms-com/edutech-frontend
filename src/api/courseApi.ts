@@ -39,6 +39,11 @@ export interface CreateCoursePayload {
   currencyCode?: string;
 }
 
+export interface AdminCourseFilterParams extends CourseFilterParams {
+  status?: string;
+  instructorId?: string;
+}
+
 /** Danh sách danh mục thật từ DB (seed: Lập trình, Thiết kế, Java, Web Development). */
 const getCategories = async (): Promise<CategoryDto[]> => {
   const res = await axiosClient.get<ApiEnvelope<CategoryResponseDto[]>>(`${COURSE_BASE}/categories`);
@@ -62,6 +67,26 @@ const getMyCourses = async (params?: CourseFilterParams): Promise<PageResult<Cou
 const createCourse = async (payload: CreateCoursePayload): Promise<Course> => {
   const res = await axiosClient.post<ApiEnvelope<CourseResponseDto>>(`${COURSE_BASE}/courses`, payload);
   return mapCourse(unwrap(res));
+};
+
+const getAdminCourses = async (params?: AdminCourseFilterParams): Promise<PageResult<Course>> => {
+  const res = await axiosClient.get<ApiEnvelope<PageDto<CourseResponseDto>>>(
+    `${COURSE_BASE}/admin/courses`, { params },
+  );
+  const page = unwrapPage(res);
+  return { ...page, items: page.items.map(mapCourse) };
+};
+
+const approveCourse = async (courseId: string): Promise<void> => {
+  const res = await axiosClient.put<ApiEnvelope<unknown>>(`${COURSE_BASE}/admin/courses/${courseId}/approve`);
+  if (typeof res?.code === 'number' && res.code !== 200) throw new Error(res.message || 'Không duyệt được khóa học.');
+};
+
+const rejectCourse = async (courseId: string, rejectionNote: string): Promise<void> => {
+  const res = await axiosClient.put<ApiEnvelope<unknown>>(
+    `${COURSE_BASE}/admin/courses/${courseId}/reject`, { rejectionNote },
+  );
+  if (typeof res?.code === 'number' && res.code !== 200) throw new Error(res.message || 'Không từ chối được khóa học.');
 };
 
 /**
@@ -117,15 +142,24 @@ const getRelatedCourses = async (courseId: string): Promise<Course[]> => {
   return unwrap(res).map(mapCourse);
 };
 
+const getLessonPlayUrl = async (lessonId: string): Promise<string> => {
+  const res = await axiosClient.get<ApiEnvelope<string>>(`${COURSE_BASE}/lessons/${lessonId}/play`);
+  return unwrap(res);
+};
+
 export const courseApi = {
   getCategories,
   getCourses,
   getMyCourses,
   createCourse,
+  getAdminCourses,
+  approveCourse,
+  rejectCourse,
   getCatalogCourses,
   getCourseById,
   getQuizQuestions,
   getRelatedCourses,
+  getLessonPlayUrl,
 };
 
 export default courseApi;

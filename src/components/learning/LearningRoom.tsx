@@ -276,7 +276,6 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
               lessonTitle={currentLesson.title}
               mediaId={currentLesson.mediaId}
               isEncrypted={currentLesson.isHlsEncrypted}
-              videoUrl={currentLesson.videoUrl}
               onLessonComplete={handleLessonComplete}
               isCompleted={completedLessonIds.includes(currentLesson.id)}
             />

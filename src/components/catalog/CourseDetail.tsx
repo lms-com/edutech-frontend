@@ -3,6 +3,7 @@ import type { Course, ReviewItem } from '../../types';
 import orderApi from '../../api/orderApi';
 import enrollmentApi from '../../api/enrollmentApi';
 import { CourseThumbnail } from '../common/CourseThumbnail';
+import courseApi from '../../api/courseApi';
 import { formatVND, formatDuration } from '../../utils/format';
 import { rememberPendingPurchase } from '../../utils/pendingPurchase';
 import {
@@ -26,6 +27,7 @@ interface CourseDetailProps {
   onBack: () => void;
   onStartLearning: (course: Course) => void;
   onEnrollFreeCourse?: (course: Course) => Promise<void>;
+  onSelectRelatedCourse?: (course: Course) => void;
 }
 
 export const CourseDetail: React.FC<CourseDetailProps> = ({
@@ -34,6 +36,7 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
   onBack,
   onStartLearning,
   onEnrollFreeCourse,
+  onSelectRelatedCourse,
 }) => {
   const [expandedSection, setExpandedSection] = useState<string>(course.sections[0]?.id || '');
   const [promoCode, setPromoCode] = useState('');
@@ -44,6 +47,11 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
+  const [relatedCourses, setRelatedCourses] = useState<Course[]>([]);
+  const [reviewStar, setReviewStar] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewSubmitError, setReviewSubmitError] = useState<string | null>(null);
 
   // Điểm đánh giá không có trong API khóa học nên tính từ danh sách đánh giá thật
   const reviewsCount = reviews.length;
@@ -68,6 +76,35 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
     void loadReviews();
     return () => { cancelled = true; };
   }, [course.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void courseApi.getRelatedCourses(course.id)
+      .then(items => { if (!cancelled) setRelatedCourses(items); })
+      .catch(err => console.warn('Không tải được khóa học liên quan:', err));
+    return () => { cancelled = true; };
+  }, [course.id]);
+
+  const handleSubmitReview = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!isEnrolled || !reviewComment.trim()) return;
+    setReviewSubmitting(true);
+    setReviewSubmitError(null);
+    try {
+      const review = await enrollmentApi.submitReview(course.id, {
+        star: reviewStar,
+        comment: reviewComment.trim(),
+      });
+      setReviews(current => [review, ...current.filter(item => item.id !== review.id)]);
+      setReviewComment('');
+    } catch (err: any) {
+      setReviewSubmitError(err?.status === 403
+        ? 'Bạn cần có quyền học đang hoạt động để gửi đánh giá.'
+        : err?.message || 'Không gửi được đánh giá.');
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
 
   const handleCheckoutVNPay = async () => {
     setIsCheckingOut(true);
@@ -243,6 +280,27 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
             )}
           </div>
 
+          {relatedCourses.length > 0 && (
+            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+              <div>
+                <h2 className="text-lg font-bold text-[#2c3e50]">Khóa học liên quan</h2>
+                <p className="mt-1 text-xs text-slate-500">Gợi ý khóa học cùng danh mục</p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {relatedCourses.map(related => (
+                  <article key={related.id} className="overflow-hidden rounded-xl border border-slate-200">
+                    <CourseThumbnail src={related.thumbnail} alt={related.title} className="aspect-video w-full bg-slate-100 object-cover" />
+                    <div className="space-y-2 p-3">
+                      <h3 className="line-clamp-2 text-xs font-bold text-slate-800">{related.title}</h3>
+                      <p className="text-xs font-semibold text-rose-600">{related.price > 0 ? formatVND(related.price) : 'Miễn phí'}</p>
+                      {onSelectRelatedCourse && <button onClick={() => onSelectRelatedCourse(related)} className="text-xs font-bold text-indigo-700 hover:underline">Xem khóa học</button>}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* Reviews List */}
           <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
             <div>
@@ -253,6 +311,29 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                 </p>
               )}
             </div>
+
+            {isEnrolled && (
+              <form onSubmit={handleSubmitReview} className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                <div>
+                  <p className="text-xs font-bold text-slate-700">Đánh giá khóa học</p>
+                  <div className="mt-2 flex items-center gap-1" role="radiogroup" aria-label="Số sao đánh giá">
+                    {[1, 2, 3, 4, 5].map(star => (
+                      <button key={star} type="button" role="radio" aria-checked={reviewStar === star}
+                        aria-label={`${star} sao`} onClick={() => setReviewStar(star)}
+                        className="rounded p-1 focus:outline-none focus:ring-2 focus:ring-amber-400">
+                        <Star className={`h-5 w-5 ${star <= reviewStar ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <textarea required maxLength={2000} value={reviewComment} onChange={event => setReviewComment(event.target.value)}
+                  rows={3} placeholder="Chia sẻ trải nghiệm học của bạn..." className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs focus:border-indigo-400 focus:outline-none" />
+                {reviewSubmitError && <p role="alert" className="text-xs text-rose-700">{reviewSubmitError}</p>}
+                <button disabled={reviewSubmitting || !reviewComment.trim()} className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
+                  {reviewSubmitting ? 'Đang gửi...' : 'Gửi đánh giá'}
+                </button>
+              </form>
+            )}
 
             {reviewsLoading && (
               <div className="flex items-center gap-2 text-xs text-slate-500 p-4">

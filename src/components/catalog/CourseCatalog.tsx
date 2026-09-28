@@ -161,6 +161,13 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                       >
                         <PlayCircle className="w-4 h-4 text-[#e74c3c]" /> Tiếp tục học
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => onSelectCourse(course)}
+                        className="text-left text-[11px] font-semibold text-indigo-700 hover:underline"
+                      >
+                        Chi tiết khóa học và đánh giá
+                      </button>
                     </div>
                   </article>
                 );

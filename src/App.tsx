@@ -1,88 +1,356 @@
-import { useEffect, useState } from 'react';
-import { ShieldCheck, Server, Laptop, CheckCircle2 } from 'lucide-react';
-import { getDeviceFingerprint } from './utils/fingerprint';
+import { useState, useEffect } from 'react';
+import type { PortalType, Course, NotificationItem } from './types';
+import { MOCK_COURSES, MOCK_CERTIFICATE, MOCK_NOTIFICATIONS } from './data/mockData';
+import { MainLayout } from './layouts/MainLayout';
+import { LearningLayout } from './layouts/LearningLayout';
+import { InstructorLayout } from './layouts/InstructorLayout';
+import { AdminLayout } from './layouts/AdminLayout';
+import { CourseCatalog } from './components/catalog/CourseCatalog';
+import { CourseDetail } from './components/catalog/CourseDetail';
+import { LearningRoom } from './components/learning/LearningRoom';
+import { CertificateView } from './components/certificate/CertificateView';
+import { PublicVerifyView } from './components/certificate/PublicVerifyView';
+import { InstructorStudio } from './components/instructor/InstructorStudio';
+import { AdminPortal } from './components/admin/AdminPortal';
+import { AuthModal } from './components/auth/AuthModal';
+import { PaymentResultView } from './components/payment/PaymentResultView';
+import { parseVNPayCallback, cleanUrlQueryParams } from './utils/vnpayHelper';
+import { canAccessPortal } from './utils/roles';
+import { useAuthStore } from './stores/useAuthStore';
+import type { VNPayPaymentResult } from './types';
+import courseApi from './api/courseApi';
+import notificationApi from './api/notificationApi';
+import confetti from 'canvas-confetti';
 
-function App() {
-  const [fingerprint, setFingerprint] = useState<string>('Đang tạo vân tay...');
+export default function App() {
+  const [currentPortal, setCurrentPortal] = useState<PortalType>('learner');
+  const [coursesList, setCoursesList] = useState<Course[]>(MOCK_COURSES);
+  const [activeCourse, setActiveCourse] = useState<Course>(MOCK_COURSES[0]);
+  const [detailCourse, setDetailCourse] = useState<Course | null>(null);
+  const [paymentResult, setPaymentResult] = useState<VNPayPaymentResult | null>(null);
+  const [isInLearningRoom, setIsInLearningRoom] = useState<boolean>(false);
+  const [showCertificateModal, setShowCertificateModal] = useState<boolean>(false);
+  const [publicVerifyHash, setPublicVerifyHash] = useState<string>('');
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [notifications, setNotifications] = useState<NotificationItem[]>(MOCK_NOTIFICATIONS);
 
+  const fetchCurrentUser = useAuthStore(state => state.fetchCurrentUser);
+
+  // Khôi phục phiên đăng nhập từ token đã lưu để F5 không mất đăng nhập
   useEffect(() => {
-    getDeviceFingerprint().then((fp) => setFingerprint(fp));
+    void fetchCurrentUser();
+  }, [fetchCurrentUser]);
+
+  /**
+   * Cổng duy nhất kiểm soát việc chuyển portal: vai trò không hợp lệ thì không vào được,
+   * dù bấm từ header, footer hay sau khi đăng nhập.
+   */
+  const handleSelectPortal = (portal: PortalType) => {
+    if (!canAccessPortal(useAuthStore.getState().user?.roles, portal)) {
+      return;
+    }
+    setCurrentPortal(portal);
+    setDetailCourse(null);
+  };
+
+  // 1. Tải danh sách khóa học từ backend với fallback thông minh
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        const data = await courseApi.getCourses();
+        if (data && Array.isArray(data) && data.length > 0) {
+          // Nếu backend trả về courses, cập nhật vào state
+          setCoursesList(data);
+          setActiveCourse(data[0]);
+        }
+      } catch {
+        // Fallback: Sử dụng dữ liệu mock chuẩn đã chuẩn bị
+      }
+    };
+    fetchCourses();
   }, []);
 
+  // 2. Tải thông báo & thiết lập luồng SSE Real-time
+  useEffect(() => {
+    const fetchNotifs = async () => {
+      try {
+        const notifs = await notificationApi.getNotifications();
+        if (notifs && Array.isArray(notifs) && notifs.length > 0) {
+          const mapped: NotificationItem[] = notifs.map((n: any) => ({
+            id: n.id,
+            title: n.title,
+            message: n.content,
+            type: n.type === 'ORDER_COMPLETED' ? 'PAYMENT' : 'SYSTEM',
+            timestamp: new Date(n.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+            isRead: n.isRead,
+          }));
+          setNotifications(mapped);
+        }
+      } catch {
+        // Fallback: Dùng danh sách thông báo mẫu
+      }
+    };
+    fetchNotifs();
+
+    // Kết nối SSE nếu chạy môi trường có Gateway
+    try {
+      const sseUrl = notificationApi.getSseUrl();
+      const eventSource = new EventSource(sseUrl);
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          const newNotif: NotificationItem = {
+            id: `sse_${Date.now()}`,
+            title: data.title || 'Thông báo mới',
+            message: data.content || data.message || '',
+            type: data.type || 'SYSTEM',
+            timestamp: 'Vừa xong',
+            isRead: false,
+          };
+          setNotifications(prev => [newNotif, ...prev]);
+        } catch {
+          // Ignore parse errors
+        }
+      };
+
+      return () => {
+        eventSource.close();
+      };
+    } catch {
+      // Ignore SSE unsupported environments
+    }
+  }, []);
+
+  // 3. Tự động phát hiện và xử lý kết quả thanh toán từ VNPay Callback URL
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.search) {
+      const result = parseVNPayCallback(window.location.search);
+      if (result) {
+        setPaymentResult(result);
+        cleanUrlQueryParams();
+
+        // Tự động đẩy thông báo vào Notification Dropdown
+        const newNotif: NotificationItem = {
+          id: `pay_${Date.now()}`,
+          title: result.isSuccess ? 'Thanh toán thành công' : 'Thanh toán không thành công',
+          message: result.message,
+          type: 'PAYMENT',
+          timestamp: 'Vừa xong',
+          isRead: false,
+        };
+        setNotifications((prev) => [newNotif, ...prev]);
+      }
+    }
+  }, []);
+
+  const handleSimulateSSE = () => {
+    const sseEvents = [
+      {
+        title: 'Cấp chứng chỉ tốt nghiệp!',
+        message: 'Chứng chỉ khóa học của bạn đã sẵn sàng và được ký số SHA-256.',
+        type: 'CERTIFICATE' as const
+      },
+      {
+        title: 'Bài giảng mới đã sẵn sàng',
+        message: 'Hệ thống đã tối ưu hóa và xuất bản bài giảng mới cho khóa học của bạn.',
+        type: 'VIDEO_PROCESSED' as const
+      },
+      {
+        title: 'Xác nhận thanh toán thành công',
+        message: 'Giao dịch đăng ký khóa học đã được hệ thống ghi nhận thành công.',
+        type: 'PAYMENT' as const
+      }
+    ];
+
+    const randomEvent = sseEvents[Math.floor(Math.random() * sseEvents.length)];
+    const newNotif: NotificationItem = {
+      id: `notif_${Date.now()}`,
+      title: randomEvent.title,
+      message: randomEvent.message,
+      type: randomEvent.type,
+      timestamp: 'Vừa xong',
+      isRead: false
+    };
+
+    setNotifications(prev => [newNotif, ...prev]);
+  };
+
+  const handleMarkAllAsRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    try {
+      notificationApi.markAllAsRead();
+    } catch {
+      // Local state updated
+    }
+  };
+
+  const handleOpenCertificate = () => {
+    setShowCertificateModal(true);
+    try {
+      confetti({
+        particleCount: 70,
+        spread: 60,
+        origin: { y: 0.4 }
+      });
+    } catch {
+      // Ignore
+    }
+  };
+
+  const handleOpenPublicVerify = (hash?: string) => {
+    setPublicVerifyHash(hash || MOCK_CERTIFICATE.qrCodeHash);
+    setCurrentPortal('public_verify');
+    setShowCertificateModal(false);
+  };
+
+  // Nếu đang ở trang xác thực chứng chỉ công khai (Không cần đăng nhập, toàn màn hình)
+  if (currentPortal === 'public_verify') {
+    return (
+      <PublicVerifyView
+        hash={publicVerifyHash || MOCK_CERTIFICATE.qrCodeHash}
+        certificate={MOCK_CERTIFICATE}
+        onBackToApp={() => setCurrentPortal('learner')}
+        onOpenCertificatePreview={() => setShowCertificateModal(true)}
+      />
+    );
+  }
+
+  // Nếu đang trong phòng học LMS (Cinema Mode Layout)
+  if (isInLearningRoom) {
+    return (
+      <LearningLayout
+        courseTitle={activeCourse.title}
+        progressPercent={activeCourse.sections.length > 0 ? 33 : 0}
+        onBack={() => setIsInLearningRoom(false)}
+        onOpenCertificate={handleOpenCertificate}
+      >
+        <LearningRoom
+          course={activeCourse}
+          onBack={() => setIsInLearningRoom(false)}
+          onOpenCertificate={handleOpenCertificate}
+        />
+
+        {showCertificateModal && (
+          <CertificateView
+            certificate={MOCK_CERTIFICATE}
+            onClose={() => setShowCertificateModal(false)}
+            onOpenPublicVerify={handleOpenPublicVerify}
+          />
+        )}
+      </LearningLayout>
+    );
+  }
+
+  // Shared handlers for Header across layouts
+  const sharedHeaderProps = {
+    currentPortal,
+    onSelectPortal: handleSelectPortal,
+    onOpenLearningRoom: () => setIsInLearningRoom(true),
+    onOpenCertificate: handleOpenCertificate,
+    onOpenPublicVerify: () => handleOpenPublicVerify(),
+    notifications,
+    onMarkAllAsRead: handleMarkAllAsRead,
+    onSimulateSSE: handleSimulateSSE,
+    onSelectNotification: (item: NotificationItem) => {
+      if (item.type === 'CERTIFICATE') {
+        handleOpenCertificate();
+      }
+    },
+    onOpenAuthModal: () => setIsAuthModalOpen(true),
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-      <div className="max-w-xl w-full bg-white rounded-2xl shadow-xl border border-slate-200 p-8">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 bg-brand-navy rounded-xl flex items-center justify-center text-white">
-            <Server className="w-6 h-6 text-brand-red" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-brand-navy">EduTech LMS Frontend</h1>
-            <p className="text-sm text-slate-500">Khởi tạo nền móng Ngày 1 thành công!</p>
-          </div>
-        </div>
+    <>
+      {/* 1. Phân hệ Giảng viên (Instructor Studio) */}
+      {currentPortal === 'instructor' && (
+        <InstructorLayout {...sharedHeaderProps}>
+          <InstructorStudio
+            course={activeCourse}
+            onEnterLearningRoom={(course) => {
+              setActiveCourse(course);
+              setIsInLearningRoom(true);
+            }}
+            onBackToLearner={() => setCurrentPortal('learner')}
+          />
+        </InstructorLayout>
+      )}
 
-        <div className="space-y-4">
-          {/* Card Gateway Info */}
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <ShieldCheck className="w-5 h-5 text-emerald-600" />
-              <span className="text-sm font-medium text-slate-700">API Gateway URL</span>
-            </div>
-            <span className="text-sm font-semibold text-brand-navy bg-slate-200 px-3 py-1 rounded-md font-mono">
-              http://localhost:8080
-            </span>
-          </div>
+      {/* 2. Phân hệ Quản trị viên (Admin Portal) */}
+      {currentPortal === 'admin' && (
+        <AdminLayout {...sharedHeaderProps}>
+          <AdminPortal
+            onPreviewCourse={(course) => {
+              setActiveCourse(course);
+              setIsInLearningRoom(true);
+            }}
+            onBackToLearner={() => setCurrentPortal('learner')}
+          />
+        </AdminLayout>
+      )}
 
-          {/* Card Fingerprint Info */}
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-            <div className="flex items-center gap-2 mb-1">
-              <Laptop className="w-5 h-5 text-brand-accent" />
-              <span className="text-sm font-medium text-slate-700">Device Fingerprint hiện tại</span>
-            </div>
-            <p className="text-xs font-mono text-slate-600 break-all bg-white p-2 rounded border border-slate-200">
-              {fingerprint}
-            </p>
-            <p className="text-xs text-slate-400 mt-1">
-              * Mã này được tự động gắn vào Header <code>X-Device-Fingerprint</code> để Gateway kiểm soát đa thiết bị.
-            </p>
-          </div>
+      {/* 3. Phân hệ Học viên (Learner Portal - Default) */}
+      {currentPortal === 'learner' && (
+        <MainLayout {...sharedHeaderProps}>
+          {paymentResult ? (
+            <PaymentResultView
+              result={paymentResult}
+              courseTitle={detailCourse?.title || activeCourse.title}
+              courseId={detailCourse?.id || activeCourse.id}
+              onStartLearning={(courseId) => {
+                const matched = coursesList.find((c) => c.id === courseId) || activeCourse;
+                setActiveCourse(matched);
+                setPaymentResult(null);
+                setDetailCourse(null);
+                setIsInLearningRoom(true);
+              }}
+              onRetry={() => {
+                setPaymentResult(null);
+              }}
+              onBackHome={() => {
+                setPaymentResult(null);
+                setDetailCourse(null);
+              }}
+            />
+          ) : detailCourse ? (
+            <CourseDetail
+              course={detailCourse}
+              onBack={() => setDetailCourse(null)}
+              onStartLearning={(course) => {
+                setActiveCourse(course);
+                setIsInLearningRoom(true);
+              }}
+            />
+          ) : (
+            <CourseCatalog
+              courses={coursesList}
+              onSelectCourse={(course) => setDetailCourse(course)}
+              onEnterLearningRoom={(course) => {
+                setActiveCourse(course);
+                setIsInLearningRoom(true);
+              }}
+            />
+          )}
+        </MainLayout>
+      )}
 
-          {/* Checklist ngày 1 */}
-          <div className="p-4 bg-emerald-50/60 rounded-xl border border-emerald-200">
-            <h3 className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-2">
-              Checklist Ngày 1 Hoàn Thành
-            </h3>
-            <ul className="space-y-1.5 text-xs text-emerald-700">
-              <li className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                Vite + React + TypeScript + Tailwind CSS v4
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                AxiosClient Interceptor tích hợp Token & Device Fingerprint
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                Zustand Auth Store quản lý trạng thái đăng nhập
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                Độc lập Git repository trên nhánh <code>main</code>
-              </li>
-            </ul>
-          </div>
-        </div>
+      {/* Modal Chứng chỉ dùng chung */}
+      {showCertificateModal && (
+        <CertificateView
+          certificate={MOCK_CERTIFICATE}
+          onClose={() => setShowCertificateModal(false)}
+          onOpenPublicVerify={handleOpenPublicVerify}
+        />
+      )}
 
-        <div className="mt-8 pt-6 border-t border-slate-100 flex justify-between items-center">
-          <span className="text-xs text-slate-400 font-medium">EduTech LMS Architecture</span>
-          <button className="bg-brand-red hover:bg-red-600 text-white text-sm font-medium px-5 py-2.5 rounded-xl transition duration-200 shadow-md">
-            Sẵn sàng cho Ngày 2 →
-          </button>
-        </div>
-      </div>
-    </div>
+      {/* IAM Modal Đăng nhập / Đăng ký */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onSuccess={(targetPortal) => {
+          if (targetPortal) handleSelectPortal(targetPortal);
+        }}
+      />
+    </>
   );
 }
-
-export default App;

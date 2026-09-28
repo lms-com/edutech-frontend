@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Play, Pause, Volume2, VolumeX, Maximize2, ShieldCheck, CheckCircle2, Sparkles } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize2, ShieldCheck, CheckCircle2, Sparkles, Video } from 'lucide-react';
 import Hls from 'hls.js';
 
 interface VideoPlayerProps {
@@ -15,7 +15,8 @@ interface VideoPlayerProps {
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   lessonId,
   mediaId,
-  videoUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+  isEncrypted,
+  videoUrl,
   onLessonComplete,
   isCompleted = false
 }) => {
@@ -37,7 +38,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   // 1. Khởi tạo phát luồng HLS (.m3u8) với Hls.js hoặc fallback native/mp4
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !videoUrl) return;
 
     // Hủy phiên HLS cũ nếu đang chạy
     if (hlsRef.current) {
@@ -174,19 +175,35 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     return `${mins}:${remainingSecs < 10 ? '0' : ''}${remainingSecs}`;
   };
 
+  // Bài học chưa có video: báo thật thay vì phát một video mẫu không liên quan
+  // (trước đây component mặc định phát video demo của Google khi thiếu videoUrl).
+  if (!videoUrl) {
+    return (
+      <div className="relative rounded-2xl overflow-hidden bg-[#0f172a] shadow-2xl border border-slate-800 flex flex-col items-center justify-center aspect-video gap-3">
+        <Video className="w-10 h-10 text-slate-600" />
+        <p className="text-sm font-semibold text-slate-300">Bài giảng này chưa có video</p>
+        <p className="text-xs text-slate-500">Nội dung đang được cập nhật.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="relative rounded-2xl overflow-hidden bg-black shadow-2xl border border-slate-800 group">
       {/* AES-128 Encryption & Security Overlay Header */}
       <div className="absolute top-3 left-3 right-3 z-20 flex items-center justify-between pointer-events-none transition-opacity duration-300">
-        <div className="flex items-center gap-2 bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-700/60 pointer-events-auto shadow-md">
-          <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          <span className="text-xs font-semibold text-slate-200">
-            HLS AES-128 Stream: <span className="text-emerald-400 font-mono text-[11px]">{mediaId}.m3u8</span>
-          </span>
-          <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-mono uppercase">
-            Bảo Mật
-          </span>
-        </div>
+        {isEncrypted ? (
+          <div className="flex items-center gap-2 bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-700/60 pointer-events-auto shadow-md">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs font-semibold text-slate-200">
+              HLS AES-128 Stream: <span className="text-emerald-400 font-mono text-[11px]">{mediaId}.m3u8</span>
+            </span>
+            <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-mono uppercase">
+              Bảo Mật
+            </span>
+          </div>
+        ) : (
+          <div /> /* Không phải luồng mã hoá thì không hiển thị nhãn AES-128 giả */
+        )}
 
         {/* Quick Testing Shortcut */}
         <button

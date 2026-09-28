@@ -1,23 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Course, Lesson, Quiz } from '../../types';
 import { VideoPlayer } from '../player/VideoPlayer';
 import { QuizModal } from '../quiz/QuizModal';
 import { 
   ArrowLeft, Award, CheckCircle2, Circle, PlayCircle, HelpCircle, 
   ChevronDown, ChevronUp, FileText, Download, MessageSquare, Send, 
-  Sparkles, ShieldCheck, Check, Clock, BookOpen, Layers, CheckCheck
+  Sparkles, ShieldCheck, Check, Clock, BookOpen, Layers, CheckCheck, AlertCircle, Loader2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import enrollmentApi from '../../api/enrollmentApi';
+import enrollmentApi, { type EnrollmentDto } from '../../api/enrollmentApi';
 
 interface LearningRoomProps {
   course: Course;
+  /** Lượt ghi danh thật của người dùng cho khóa học này; null nghĩa là chưa ghi danh. */
+  enrollment: EnrollmentDto | null;
   onBack: () => void;
   onOpenCertificate: () => void;
 }
 
 export const LearningRoom: React.FC<LearningRoomProps> = ({
   course,
+  enrollment,
   onBack,
   onOpenCertificate
 }) => {
@@ -28,18 +31,38 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
   const [currentLessonId, setCurrentLessonId] = useState<string>(
     allLessons[0]?.id || ''
   );
-  const [completedLessonIds, setCompletedLessonIds] = useState<string[]>(() => {
-    // Initial completed lessons: mark first 2 completed as realistic initial state
-    return [allLessons[0]?.id || ''];
-  });
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    sec_01: true,
-    sec_02: true,
-    sec_03: true
-  });
+  const [completedLessonIds, setCompletedLessonIds] = useState<string[]>([]);
+  const [progressLoading, setProgressLoading] = useState<boolean>(!!enrollment);
+  const [progressError, setProgressError] = useState<string | null>(null);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [activeTab, setActiveTab] = useState<'overview' | 'resources' | 'qa'>('overview');
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
-  const [quizCompleted, setQuizCompleted] = useState(false);
+  const [passedQuizIds, setPassedQuizIds] = useState<string[]>([]);
+
+  // Tiến độ lấy từ server; trước đây màn hình tự đánh dấu sẵn bài đầu tiên là xong
+  useEffect(() => {
+    if (!enrollment) {
+      setProgressLoading(false);
+      return;
+    }
+    let cancelled = false;
+    const load = async () => {
+      setProgressLoading(true);
+      setProgressError(null);
+      try {
+        const progress = await enrollmentApi.getEnrollmentProgress(enrollment.id);
+        if (!cancelled) {
+          setCompletedLessonIds(progress.filter(item => item.isCompleted).map(item => item.lessonId));
+        }
+      } catch (err: any) {
+        if (!cancelled) setProgressError(err?.message || 'Không tải được tiến độ học tập.');
+      } finally {
+        if (!cancelled) setProgressLoading(false);
+      }
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, [enrollment]);
 
   // Q&A Comments State
   const [qaComments, setQaComments] = useState<Array<{ id: string; author: string; avatar: string; time: string; text: string }>>([
@@ -70,39 +93,27 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
     ? Math.min(100, Math.round((completedCount / totalLessonCount) * 100))
     : 0;
   const isAllCompleted = progressPercent === 100;
+  /** Chứng chỉ chỉ mở khi đã ghi danh thật và tiến độ đã tải xong từ server */
+  const canGetCertificate = isAllCompleted && !!enrollment && !progressLoading;
 
 
-  // Handler when video reaches >= 80% or finishes
+  /** Video xem đủ 80% hoặc kết thúc: ghi tiến độ lên server. */
   const handleLessonComplete = async (lessonId: string) => {
-    if (!completedLessonIds.includes(lessonId)) {
+    if (!enrollment || completedLessonIds.includes(lessonId)) return;
+
+    setProgressError(null);
+    try {
+      await enrollmentApi.updateLessonProgress(enrollment.id, lessonId, { isCompleted: true });
       const nextCompleted = [...completedLessonIds, lessonId];
       setCompletedLessonIds(nextCompleted);
-
-      // Đồng bộ tiến độ lên Enrollment Service (:8080)
-      try {
-        await enrollmentApi.updateLessonProgress(lessonId, { isCompleted: true });
-      } catch {
-        // Fallback: Nếu backend offline thì lưu trên frontend
-      }
-
-      // Check if this reaches 100%
       if (nextCompleted.length === totalLessonCount) {
         triggerCompletionConfetti();
       }
+    } catch (err: any) {
+      // Cố ý KHÔNG đánh dấu hoàn thành tại chỗ khi server ghi thất bại: nếu đánh
+      // dấu, người học thấy 100% nhưng tải lại trang là mất sạch.
+      setProgressError(err?.message || 'Không lưu được tiến độ lên máy chủ.');
     }
-  };
-
-  // Quick 1-click test to achieve 100% completion & unlock certificate immediately
-  const handleFastTrackAllComplete = () => {
-    const allIds = allLessons.map(l => l.id);
-    setCompletedLessonIds(allIds);
-    setQuizCompleted(true);
-    triggerCompletionConfetti();
-  };
-
-  const handleResetProgress = () => {
-    setCompletedLessonIds([allLessons[0]?.id || '']);
-    setQuizCompleted(false);
   };
 
   const triggerCompletionConfetti = () => {
@@ -197,44 +208,54 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
               </span>
             </div>
 
-            {/* Quick Demo: Fast-Track 100% Button for instant evaluation */}
-            {!isAllCompleted ? (
-              <button
-                onClick={handleFastTrackAllComplete}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-all shadow-sm"
-                title="Đánh dấu tất cả bài học hoàn thành để mở khóa và xem ngay Chứng chỉ A4"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                <span className="hidden md:inline">⚡ Hoàn thành 100% ngay</span>
-                <span className="md:hidden">100%</span>
-              </button>
-            ) : (
-              <button
-                onClick={handleResetProgress}
-                className="text-[11px] text-slate-400 hover:text-slate-200 underline px-1"
-                title="Đặt lại tiến độ để thử lại luồng học"
-              >
-                Đặt lại
-              </button>
-            )}
-
             {/* Certificate Action Button */}
             <button
               onClick={onOpenCertificate}
-              disabled={!isAllCompleted}
+              disabled={!canGetCertificate}
               className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-xl font-bold text-xs transition-all shadow-md ${
-                isAllCompleted
+                canGetCertificate
                   ? 'bg-[#e74c3c] hover:bg-[#c0392b] text-white animate-bounce ring-2 ring-amber-300/40 cursor-pointer shadow-red-900/30'
                   : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60'
               }`}
-              title={isAllCompleted ? 'Bấm để xem và tải chứng chỉ tốt nghiệp!' : 'Hoàn thành 100% bài học để mở khóa chứng chỉ'}
+              title={canGetCertificate ? 'Bấm để xem và tải chứng chỉ tốt nghiệp!' : 'Hoàn thành 100% bài học để mở khóa chứng chỉ'}
             >
               <Award className="w-4 h-4 text-amber-300" />
-              <span>{isAllCompleted ? 'Nhận Chứng Chỉ Ngay 🎓' : 'Chứng chỉ (Khóa)'}</span>
+              <span>{canGetCertificate ? 'Nhận Chứng Chỉ Ngay 🎓' : 'Chứng chỉ (Khóa)'}</span>
             </button>
           </div>
         </div>
       </header>
+
+      {/* Trạng thái ghi danh và tiến độ */}
+      {!enrollment && (
+        <div className="max-w-7xl w-full mx-auto px-3 md:px-6 pt-4">
+          <div className="p-3 bg-amber-950/40 border border-amber-700/50 rounded-xl text-xs text-amber-200 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>
+              Bạn chưa ghi danh khóa học này nên tiến độ sẽ không được lưu. Hãy đăng ký học
+              để bắt đầu tính tiến độ và nhận chứng chỉ.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {progressLoading && (
+        <div className="max-w-7xl w-full mx-auto px-3 md:px-6 pt-4">
+          <div className="flex items-center gap-2 text-xs text-slate-400">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Đang tải tiến độ học tập...
+          </div>
+        </div>
+      )}
+
+      {progressError && (
+        <div className="max-w-7xl w-full mx-auto px-3 md:px-6 pt-4">
+          <div className="p-3 bg-rose-950/40 border border-rose-700/50 rounded-xl text-xs text-rose-200 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{progressError}</span>
+          </div>
+        </div>
+      )}
 
       {/* Main Learning Workspace (Cinema Layout) */}
       <div className="flex-1 max-w-7xl w-full mx-auto p-3 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -554,32 +575,38 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                         })}
 
                         {/* Quiz Item at end of section */}
-                        {section.quiz && (
-                          <div 
-                            onClick={() => setActiveQuiz(section.quiz!)}
-                            className={`px-3 py-2.5 flex items-center justify-between gap-3 cursor-pointer transition-colors bg-amber-950/20 hover:bg-amber-900/30 border-l-4 ${
-                              quizCompleted ? 'border-emerald-500' : 'border-amber-500'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <HelpCircle className={`w-4 h-4 shrink-0 ${
-                                quizCompleted ? 'text-emerald-400' : 'text-amber-400'
-                              }`} />
-                              <div className="truncate">
-                                <p className="text-xs font-bold text-amber-200 truncate">
-                                  {section.quiz.title}
-                                </p>
-                                <span className="text-[10px] text-amber-400 font-semibold">
-                                  {quizCompleted ? '✓ Đã đạt bài trắc nghiệm' : 'Bài kiểm tra trắc nghiệm kết thúc phần'}
-                                </span>
+                        {section.quiz && (() => {
+                          const isQuizPassed = passedQuizIds.includes(section.quiz!.id);
+                          return (
+                            <div
+                              onClick={() => setActiveQuiz(section.quiz!)}
+                              className={`px-3 py-2.5 flex items-center justify-between gap-3 cursor-pointer transition-colors bg-amber-950/20 hover:bg-amber-900/30 border-l-4 ${
+                                isQuizPassed ? 'border-emerald-500' : 'border-amber-500'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <HelpCircle className={`w-4 h-4 shrink-0 ${
+                                  isQuizPassed ? 'text-emerald-400' : 'text-amber-400'
+                                }`} />
+                                <div className="truncate">
+                                  <p className="text-xs font-bold text-amber-200 truncate">
+                                    {section.quiz.title}
+                                  </p>
+                                  <span className="text-[10px] text-amber-400 font-semibold">
+                                    {section.quiz.questions.length > 0
+                                      ? `${section.quiz.questions.length} câu hỏi`
+                                      : 'Chưa có câu hỏi'}
+                                    {isQuizPassed && ' • Đã đạt'}
+                                  </span>
+                                </div>
                               </div>
-                            </div>
 
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-slate-950 shrink-0">
-                              {quizCompleted ? 'Xem lại' : 'Làm Quiz'}
-                            </span>
-                          </div>
-                        )}
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-slate-950 shrink-0">
+                                {isQuizPassed ? 'Xem lại' : 'Làm Quiz'}
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
@@ -600,15 +627,11 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
       {activeQuiz && (
         <QuizModal
           quiz={activeQuiz}
+          enrollmentId={enrollment?.id ?? null}
           onClose={() => setActiveQuiz(null)}
-          onQuizPassed={(score) => {
-            setQuizCompleted(true);
-            // Also mark any unfinished lessons in section 1 completed
-            course.sections[0]?.lessons.forEach(l => {
-              if (!completedLessonIds.includes(l.id)) {
-                handleLessonComplete(l.id);
-              }
-            });
+          onQuizPassed={() => {
+            // Điểm do server chấm; ở đây chỉ ghi nhận để đổi trạng thái hiển thị
+            setPassedQuizIds(prev => prev.includes(activeQuiz.id) ? prev : [...prev, activeQuiz.id]);
           }}
         />
       )}

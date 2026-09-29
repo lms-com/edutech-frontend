@@ -39,6 +39,33 @@ export interface CreateCoursePayload {
   currencyCode?: string;
 }
 
+export interface UpdateCoursePayload {
+  title?: string;
+  slug?: string;
+  categoryId?: string;
+  description?: string;
+  thumbnailUrl?: string;
+  level?: string;
+  basePrice?: number;
+  currencyCode?: string;
+}
+
+export interface CreateSectionPayload {
+  courseId: string;
+  title: string;
+  orderIndex?: number;
+}
+
+export interface CreateLessonPayload {
+  title: string;
+  type: string;
+  orderIndex?: number;
+  freePreview?: boolean;
+  videoUrl?: string;
+  duration?: number;
+  passScore?: number;
+}
+
 export interface AdminCourseFilterParams extends CourseFilterParams {
   status?: string;
   instructorId?: string;
@@ -69,6 +96,41 @@ const createCourse = async (payload: CreateCoursePayload): Promise<Course> => {
   return mapCourse(unwrap(res));
 };
 
+const updateCourse = async (courseId: string, payload: UpdateCoursePayload): Promise<Course> => {
+  const res = await axiosClient.patch<ApiEnvelope<CourseResponseDto>>(`${COURSE_BASE}/courses/${courseId}`, payload);
+  return mapCourse(unwrap(res));
+};
+
+const changeCourseStatus = async (courseId: string, status: string): Promise<void> => {
+  const res = await axiosClient.put<ApiEnvelope<unknown>>(`${COURSE_BASE}/courses/${courseId}/status`, { status });
+  if (typeof res?.code === 'number' && res.code !== 200) throw new Error(res.message || 'Không đổi được trạng thái khóa học.');
+};
+
+const createSection = async (payload: CreateSectionPayload): Promise<void> => {
+  const res = await axiosClient.post<ApiEnvelope<unknown>>(`${COURSE_BASE}/sections`, payload);
+  if (typeof res?.code === 'number' && res.code !== 200) throw new Error(res.message || 'Không tạo được chương học.');
+};
+
+const updateSection = async (sectionId: string, payload: { title: string; orderIndex?: number }): Promise<void> => {
+  const res = await axiosClient.put<ApiEnvelope<unknown>>(`${COURSE_BASE}/sections/${sectionId}`, payload);
+  if (typeof res?.code === 'number' && res.code !== 200) throw new Error(res.message || 'Không cập nhật được chương học.');
+};
+
+const deleteSection = async (sectionId: string): Promise<void> => {
+  const res = await axiosClient.delete<ApiEnvelope<unknown>>(`${COURSE_BASE}/sections/${sectionId}`);
+  if (typeof res?.code === 'number' && res.code !== 200) throw new Error(res.message || 'Không xóa được chương học.');
+};
+
+const createLesson = async (sectionId: string, payload: CreateLessonPayload): Promise<void> => {
+  const res = await axiosClient.post<ApiEnvelope<unknown>>(`${COURSE_BASE}/sections/${sectionId}/lessons`, payload);
+  if (typeof res?.code === 'number' && res.code !== 200) throw new Error(res.message || 'Không tạo được bài học.');
+};
+
+const deleteLesson = async (lessonId: string): Promise<void> => {
+  const res = await axiosClient.delete<ApiEnvelope<unknown>>(`${COURSE_BASE}/lessons/${lessonId}`);
+  if (typeof res?.code === 'number' && res.code !== 200) throw new Error(res.message || 'Không xóa được bài học.');
+};
+
 const getAdminCourses = async (params?: AdminCourseFilterParams): Promise<PageResult<Course>> => {
   const res = await axiosClient.get<ApiEnvelope<PageDto<CourseResponseDto>>>(
     `${COURSE_BASE}/admin/courses`, { params },
@@ -91,10 +153,6 @@ const rejectCourse = async (courseId: string, rejectionNote: string): Promise<vo
 
 /**
  * Danh mục dành cho khách/học viên: chỉ khóa đã xuất bản.
- *
- * Lọc ở đây vì `GET /courses` phía backend chỉ lọc `is_deleted`, không lọc
- * `status` — nếu không lọc, khóa PENDING/REJECTED sẽ hiện ra ngoài trang chủ.
- * Đúng ra backend nên có tham số status cho endpoint công khai.
  */
 const getCatalogCourses = async (params?: CourseFilterParams): Promise<PageResult<Course>> => {
   const page = await getCourses(params);
@@ -105,7 +163,6 @@ const getCatalogCourses = async (params?: CourseFilterParams): Promise<PageResul
 const getQuizQuestions = async (lessonId: string): Promise<QuizQuestion[]> => {
   const res = await axiosClient.get<ApiEnvelope<QuestionResponseDto[]>>(
     `${COURSE_BASE}/lessons/${lessonId}/questions`,
-    // isLearner=true để backend ẩn đáp án đúng; việc chấm điểm do server thực hiện.
     { params: { isLearner: true } },
   );
   return mapQuestions(unwrap(res));
@@ -115,7 +172,6 @@ const getCourseById = async (courseId: string): Promise<Course> => {
   const res = await axiosClient.get<ApiEnvelope<CourseDetailResponseDto>>(`${COURSE_BASE}/courses/${courseId}`);
   const detail = unwrap(res);
 
-  // Câu hỏi của bài kiểm tra nằm ở endpoint riêng, phải gọi thêm cho từng quiz.
   const quizLessonIds = (detail.sections ?? [])
     .flatMap(section => section.lessons ?? [])
     .filter(lesson => (lesson.type ?? '').toUpperCase() === 'QUIZ')
@@ -127,7 +183,6 @@ const getCourseById = async (courseId: string): Promise<Course> => {
       try {
         questionsByLesson[lessonId] = await getQuizQuestions(lessonId);
       } catch (err) {
-        // Không tải được câu hỏi thì vẫn hiển thị được chương/bài, chỉ mất phần quiz.
         console.warn(`Không tải được câu hỏi cho bài kiểm tra ${lessonId}:`, err);
         questionsByLesson[lessonId] = [];
       }
@@ -152,6 +207,13 @@ export const courseApi = {
   getCourses,
   getMyCourses,
   createCourse,
+  updateCourse,
+  changeCourseStatus,
+  createSection,
+  updateSection,
+  deleteSection,
+  createLesson,
+  deleteLesson,
   getAdminCourses,
   approveCourse,
   rejectCourse,

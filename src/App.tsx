@@ -497,7 +497,7 @@ export default function App() {
 
       {/* 2. Phân hệ Quản trị viên (Admin Portal) */}
       {currentPortal === 'admin' && (
-        <AdminLayout {...sharedHeaderProps}>
+        <AdminLayout {...sharedHeaderProps} onBackToLearner={() => handleSelectPortal('learner')}>
           <AdminPortal
             onPreviewCourse={(course) => enterLearningRoom(course, { preview: true })}
             onBackToLearner={() => handleSelectPortal('learner')}

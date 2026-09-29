@@ -210,7 +210,7 @@ export const PaymentResultView: React.FC<PaymentResultViewProps> = ({
               <div className="text-xs text-emerald-950 space-y-1">
                 <p className="font-bold">Cổng thanh toán trả kết quả thành công</p>
                 <p className="text-emerald-800 leading-relaxed">
-                  Hệ thống đang xác nhận ghi danh. Bạn chỉ có thể vào học sau khi quyền học được kích hoạt.
+                  Hệ thống đang xác nhận ghi danh từ máy chủ. Bạn chỉ có thể vào học sau khi quyền học (Enrollment) được chuyển sang trạng thái kích hoạt.
                 </p>
               </div>
             </div>
@@ -219,10 +219,24 @@ export const PaymentResultView: React.FC<PaymentResultViewProps> = ({
           {/* Action CTAs */}
           <div className="space-y-3 pt-2">
             {accessError && result.isSuccess && (
-              <div role="status" className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
-                {accessError}
+              <div role="status" className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-2.5">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <span className="leading-relaxed font-medium">{accessError}</span>
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => onStartLearning(courseId)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs transition cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Kiểm tra lại quyền học
+                  </button>
+                </div>
               </div>
             )}
+
             {result.isSuccess ? (
               <button
                 type="button"

@@ -1,32 +1,58 @@
-# React + TypeScript + Vite
+# EduTech LMS — Frontend Web Application
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Giao diện người dùng cho nền tảng đào tạo trực tuyến EduTech LMS.
 
-Currently, two official plugins are available:
+- **Công nghệ chính:** React 19, TypeScript, Vite 8, Tailwind CSS 4, Zustand, Axios.
+- **Sổ tay hướng dẫn chi tiết:** Xem file [HUONG-DAN-SU-DUNG.md](../HUONG-DAN-SU-DUNG.md) tại thư mục gốc của workspace.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+---
 
-## React Compiler
+## 1. Cấu trúc Phân hệ (Portals)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Ứng dụng chia thành 4 không gian trải nghiệm độc lập dựa theo vai trò người dùng:
 
-## Expanding the Oxlint configuration
+1. **Học viên (Learner Portal):**
+   - Khám phá danh mục khóa học đã xuất bản (`PUBLISHED`).
+   - Mua khóa học qua VNPay hoặc ghi danh khóa miễn phí.
+   - Phòng học Cinema Mode với video bảo mật và bài kiểm tra Quiz server-evaluated.
+   - Nhận chứng chỉ số có mã QR tra cứu.
+2. **Giảng viên (Instructor Studio):**
+   - Quản lý danh sách khóa học của chính giảng viên.
+   - Tạo khóa học bản nháp (`DRAFT`), soạn cấu trúc chương học và bài giảng.
+   - Gửi yêu cầu phê duyệt khóa học (`PENDING`).
+3. **Quản trị viên (Admin Console):**
+   - Không gian quản trị tách biệt hoàn toàn (`AdminHeader` + `AdminPortal`).
+   - Thẩm định khóa học: Duyệt phát hành (`PUBLISHED`) hoặc từ chối kèm lý do (`REJECTED`).
+   - Thẩm định & Tra cứu chứng chỉ số: Đối soát mã băm SHA-256 từ Notification Service.
+   - Giám sát phiên thiết bị (Redis) và quản lý yêu cầu rút tiền (Payouts).
+4. **Tra cứu Công khai (Public Certificate Verification):**
+   - Xác thực chứng chỉ điện tử không cần đăng nhập qua URL: `/?verify=<sha256-hash>`.
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+---
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+## 2. Hướng dẫn Chạy Local
+
+### Cài đặt thư viện:
+```powershell
+npm.cmd install
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+### Chạy môi trường phát triển (Dev Server):
+> **Lưu ý:** Luôn chỉ định host IPv4 để tránh xung đột bind IPv6 trên Windows.
+```powershell
+npm.cmd run dev -- --host 127.0.0.1
+```
+Ứng dụng sẽ khả dụng tại: **`http://127.0.0.1:5173`**
+
+### Kiểm tra TypeScript & Đóng gói sản phẩm:
+```powershell
+npm.cmd run build
+```
+
+---
+
+## 3. Tài khoản Kiểm thử mặc định
+Mật khẩu chung: `KiemThu@123`
+- **Học viên:** `kiemthu.gd1@lms.com`
+- **Giảng viên:** `giangvien@lms.com`
+- **Quản trị viên:** `admin@lms.com`

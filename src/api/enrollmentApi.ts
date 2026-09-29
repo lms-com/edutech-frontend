@@ -1,52 +1,152 @@
 import axiosClient from './axiosClient';
+import { unwrap, unwrapPage, type ApiEnvelope, type PageDto, type PageResult } from './response';
+import { mapReview, type ReviewResponseDto } from './mappers/courseMapper';
+import type { ReviewItem } from '../types';
 
-export interface LessonProgressPayload {
-  isCompleted?: boolean;
+const ENROLLMENT_BASE = '/enrollment-service/api/v1';
+
+// ============================ DTO từ backend ============================
+
+export interface EnrollmentDto {
+  id: string;
+  courseId: string;
+  learnerId: string;
+  learnerName?: string | null;
+  learnerAvatar?: string | null;
+  status?: string;
+  startedAt?: string;
+  completedRate?: number;
+}
+
+export interface LessonProgressDto {
+  id?: string | null;
+  enrollmentId?: string;
+  lessonId: string;
+  isCompleted: boolean;
   lastWatchTimeSeconds?: number;
 }
 
-export interface ReviewPayload {
-  courseId: string;
-  star: number;
-  comment: string;
-}
-
-export interface QuizSubmitPayload {
+export interface QuizResultDto {
   lessonId: string;
   score: number;
   isPassed: boolean;
+  feedback?: string;
 }
 
+export interface QuizAttemptDto {
+  id: string;
+  enrollmentId: string;
+  lessonId: string;
+  score: number;
+  isPassed: boolean;
+  submittedAt?: string;
+}
+
+/** Lựa chọn của học viên cho một câu hỏi. Server đối chiếu với đáp án đúng để chấm. */
+export interface QuizAnswerPayload {
+  questionId: string;
+  answerId: string;
+}
+
+// ============================ Hàm gọi API ============================
+
+const getMyEnrollments = async (params?: { page?: number; size?: number }): Promise<PageResult<EnrollmentDto>> => {
+  const res = await axiosClient.get<ApiEnvelope<PageDto<EnrollmentDto>>>(`${ENROLLMENT_BASE}/enrollments/my`, {
+    params: { size: 100, ...params },
+  });
+  return unwrapPage(res);
+};
+
+/** Ghi danh khóa học miễn phí. Backend phải từ chối nếu khóa học có phí. */
+const enrollInFreeCourse = async (courseId: string): Promise<EnrollmentDto> => {
+  const res = await axiosClient.post<ApiEnvelope<EnrollmentDto>>(
+    `${ENROLLMENT_BASE}/enrollments/courses/${courseId}`,
+  );
+  return unwrap(res);
+};
+
+/** Lượt ghi danh của tôi cho một khóa học, null nếu chưa ghi danh. */
+const findMyEnrollmentForCourse = async (courseId: string): Promise<EnrollmentDto | null> => {
+  const page = await getMyEnrollments();
+  return page.items.find(enrollment => enrollment.courseId === courseId) ?? null;
+};
+
+const getEnrollmentProgress = async (enrollmentId: string): Promise<LessonProgressDto[]> => {
+  const res = await axiosClient.get<ApiEnvelope<LessonProgressDto[]>>(
+    `${ENROLLMENT_BASE}/progress/enrollments/${enrollmentId}`,
+  );
+  return unwrap(res);
+};
+
+const updateLessonProgress = async (
+  enrollmentId: string,
+  lessonId: string,
+  payload: { isCompleted: boolean; lastWatchTimeSeconds?: number },
+): Promise<LessonProgressDto> => {
+  const res = await axiosClient.put<ApiEnvelope<LessonProgressDto>>(
+    `${ENROLLMENT_BASE}/progress/enrollments/${enrollmentId}/lessons/${lessonId}`,
+    payload,
+  );
+  return unwrap(res);
+};
+
+const getCourseReviews = async (
+  courseId: string,
+  params?: { page?: number; size?: number },
+): Promise<PageResult<ReviewItem>> => {
+  const res = await axiosClient.get<ApiEnvelope<PageDto<ReviewResponseDto>>>(
+    `${ENROLLMENT_BASE}/reviews/courses/${courseId}`,
+    { params: { size: 50, ...params } },
+  );
+  const page = unwrapPage(res);
+  return { ...page, items: page.items.map(mapReview) };
+};
+
+/** Gửi đánh giá. courseId nằm trên đường dẫn, body chỉ có star và comment. */
+const submitReview = async (
+  courseId: string,
+  payload: { star: number; comment: string },
+): Promise<ReviewItem> => {
+  const res = await axiosClient.post<ApiEnvelope<ReviewResponseDto>>(
+    `${ENROLLMENT_BASE}/reviews/courses/${courseId}`,
+    payload,
+  );
+  return mapReview(unwrap(res));
+};
+
+/**
+ * Nộp bài kiểm tra: gửi các lựa chọn, KHÔNG gửi điểm.
+ * Điểm do backend chấm từ đáp án đúng nên không thể sửa từ phía client.
+ */
+const submitQuizAttempt = async (
+  enrollmentId: string,
+  quizId: string,
+  answers: QuizAnswerPayload[],
+): Promise<QuizResultDto> => {
+  const res = await axiosClient.post<ApiEnvelope<QuizResultDto>>(
+    `${ENROLLMENT_BASE}/quiz-attempts/enrollments/${enrollmentId}/quizzes/${quizId}`,
+    { answers },
+  );
+  return unwrap(res);
+};
+
+const getQuizAttempts = async (enrollmentId: string, quizId: string): Promise<QuizAttemptDto[]> => {
+  const res = await axiosClient.get<ApiEnvelope<QuizAttemptDto[]>>(
+    `${ENROLLMENT_BASE}/quiz-attempts/enrollments/${enrollmentId}/quizzes/${quizId}`,
+  );
+  return unwrap(res);
+};
+
 export const enrollmentApi = {
-  // 1. Lấy toàn bộ tiến độ học tập của một khóa học
-  getCourseProgress: async (courseId: string) => {
-    const res: any = await axiosClient.get(`/enrollment-service/api/v1/progress/courses/${courseId}`);
-    return res?.data || res;
-  },
-
-  // 2. Cập nhật tiến độ học của một bài học (ví dụ: đã xem >= 80%, lưu vị trí xem dở)
-  updateLessonProgress: async (lessonId: string, payload: LessonProgressPayload) => {
-    const res: any = await axiosClient.put(`/enrollment-service/api/v1/progress/lessons/${lessonId}`, payload);
-    return res?.data || res;
-  },
-
-  // 3. Lấy danh sách đánh giá của khóa học
-  getCourseReviews: async (courseId: string) => {
-    const res: any = await axiosClient.get(`/enrollment-service/api/v1/reviews/courses/${courseId}`);
-    return res?.data || res;
-  },
-
-  // 4. Gửi đánh giá phản hồi khóa học
-  submitReview: async (payload: ReviewPayload) => {
-    const res: any = await axiosClient.post('/enrollment-service/api/v1/reviews', payload);
-    return res?.data || res;
-  },
-
-  // 5. Nộp kết quả làm bài trắc nghiệm Quiz
-  submitQuizAttempt: async (payload: QuizSubmitPayload) => {
-    const res: any = await axiosClient.post('/enrollment-service/api/v1/quiz-attempts', payload);
-    return res?.data || res;
-  },
+  getMyEnrollments,
+  enrollInFreeCourse,
+  findMyEnrollmentForCourse,
+  getEnrollmentProgress,
+  updateLessonProgress,
+  getCourseReviews,
+  submitReview,
+  submitQuizAttempt,
+  getQuizAttempts,
 };
 
 export default enrollmentApi;

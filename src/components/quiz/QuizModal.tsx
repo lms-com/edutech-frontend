@@ -1,16 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { Quiz } from '../../types';
-import { Clock, CheckCircle2, AlertCircle, HelpCircle, ArrowRight, ArrowLeft, Send, Award, RotateCcw, X } from 'lucide-react';
+import { Clock, CheckCircle2, AlertCircle, HelpCircle, ArrowRight, ArrowLeft, Send, Award, RotateCcw, X, Loader2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import enrollmentApi, { type QuizAnswerPayload } from '../../api/enrollmentApi';
 
 interface QuizModalProps {
   quiz: Quiz;
+  /** Cần lượt ghi danh để server ghi nhận và chấm điểm bài làm. */
+  enrollmentId: string | null;
   onClose: () => void;
   onQuizPassed: (score: number) => void;
 }
 
 export const QuizModal: React.FC<QuizModalProps> = ({
   quiz,
+  enrollmentId,
   onClose,
   onQuizPassed
 }) => {
@@ -20,22 +24,28 @@ export const QuizModal: React.FC<QuizModalProps> = ({
   const [submitted, setSubmitted] = useState(false);
   const [score, setScore] = useState(0);
   const [hasPassed, setHasPassed] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Timer countdown
+  // Đếm ngược chỉ chạy khi bài kiểm tra có thời lượng. Dữ liệu thật hiện không có
+  // thời lượng, nếu không chặn thì timeLeft = 0 sẽ tự nộp bài sau 1 giây.
+  const hasTimer = quiz.durationMinutes > 0;
+
   useEffect(() => {
-    if (submitted) return;
+    if (submitted || !hasTimer) return;
     const timer = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
           clearInterval(timer);
-          handleSubmitQuiz();
+          void handleSubmitQuiz();
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [submitted]);
+  }, [submitted, hasTimer]);
 
   const currentQuestion = quiz.questions[currentIdx];
 
@@ -47,31 +57,56 @@ export const QuizModal: React.FC<QuizModalProps> = ({
     }));
   };
 
-  const handleSubmitQuiz = () => {
-    let correctCount = 0;
-    quiz.questions.forEach(q => {
-      if (selectedAnswers[q.id] === q.correctAnswer) {
-        correctCount++;
-      }
-    });
+  /**
+   * Nộp bài: gửi các lựa chọn đã chọn, KHÔNG gửi điểm.
+   * Điểm do backend chấm từ đáp án đúng nên không thể sửa từ phía client.
+   */
+  const handleSubmitQuiz = async () => {
+    if (isSubmitting || submitted) return;
 
-    const calculatedScore = Math.round((correctCount / quiz.questions.length) * 100);
-    const passed = calculatedScore >= quiz.passScore;
-    setScore(calculatedScore);
-    setHasPassed(passed);
-    setSubmitted(true);
+    if (!enrollmentId) {
+      setSubmitError('Bạn cần ghi danh khóa học trước khi làm bài kiểm tra.');
+      return;
+    }
+    if (quiz.questions.length === 0) {
+      setSubmitError('Bài kiểm tra này chưa có câu hỏi.');
+      return;
+    }
 
-    if (passed) {
-      try {
-        confetti({
-          particleCount: 80,
-          spread: 70,
-          origin: { y: 0.6 }
-        });
-      } catch (e) {
-        // Fallback
+    const answers: QuizAnswerPayload[] = quiz.questions
+      .map(question => {
+        const chosenKey = selectedAnswers[question.id];
+        const option = question.options.find(item => item.key === chosenKey);
+        return option?.answerId ? { questionId: question.id, answerId: option.answerId } : null;
+      })
+      .filter((item): item is QuizAnswerPayload => item !== null);
+
+    if (answers.length === 0) {
+      setSubmitError('Bạn chưa chọn đáp án cho câu nào.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      const result = await enrollmentApi.submitQuizAttempt(enrollmentId, quiz.id, answers);
+      setScore(result.score);
+      setHasPassed(result.isPassed);
+      setFeedback(result.feedback ?? null);
+      setSubmitted(true);
+
+      if (result.isPassed) {
+        try {
+          confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
+        } catch {
+          // Bỏ qua nếu trình duyệt không hỗ trợ
+        }
+        onQuizPassed(result.score);
       }
-      onQuizPassed(calculatedScore);
+    } catch (err: any) {
+      setSubmitError(err?.message || 'Không nộp được bài kiểm tra.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -101,7 +136,7 @@ export const QuizModal: React.FC<QuizModalProps> = ({
           </div>
 
           <div className="flex items-center gap-3">
-            {!submitted && (
+            {!submitted && hasTimer && (
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 text-amber-300 font-mono text-xs font-bold border border-slate-700">
                 <Clock className="w-4 h-4 text-amber-400 animate-pulse" />
                 {formatTimer(timeLeft)}
@@ -162,6 +197,13 @@ export const QuizModal: React.FC<QuizModalProps> = ({
                 })}
               </div>
 
+              {submitError && (
+                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{submitError}</span>
+                </div>
+              )}
+
               {/* Navigation Bar */}
               <div className="flex items-center justify-between pt-4 border-t border-slate-200">
                 <button
@@ -186,10 +228,11 @@ export const QuizModal: React.FC<QuizModalProps> = ({
 
                   <button
                     onClick={handleSubmitQuiz}
-                    className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold rounded-lg bg-[#e74c3c] hover:bg-[#c0392b] text-white shadow-md transition-all hover:scale-105"
+                    disabled={isSubmitting || !enrollmentId || quiz.questions.length === 0}
+                    className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold rounded-lg bg-[#e74c3c] hover:bg-[#c0392b] text-white shadow-md transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                   >
-                    <Send className="w-3.5 h-3.5" />
-                    Nộp bài Quiz
+                    {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                    {isSubmitting ? 'Đang chấm điểm...' : 'Nộp bài Quiz'}
                   </button>
                 </div>
               </div>
@@ -257,42 +300,33 @@ export const QuizModal: React.FC<QuizModalProps> = ({
               <p className="text-sm mt-1 text-slate-600">
                 Điểm số của bạn: <span className="text-2xl font-bold text-[#2c3e50]">{score}%</span> (Yêu cầu qua môn: {quiz.passScore}%)
               </p>
-              {hasPassed && (
-                <p className="text-xs text-emerald-700 font-semibold mt-2">
-                  Tiến độ khóa học đã được cập nhật. Nếu bạn đã hoàn thành tất cả bài giảng, bạn có thể nhận Chứng chỉ ngay!
+              {feedback && (
+                <p className={`text-xs font-semibold mt-2 ${hasPassed ? 'text-emerald-700' : 'text-red-700'}`}>
+                  {feedback}
                 </p>
               )}
             </div>
 
-            {/* Answer Explanations */}
+            {/* Server không trả về việc từng câu đúng hay sai (tránh lộ đáp án),
+                nên chỉ hiển thị lại lựa chọn của người học. */}
             <div className="space-y-4">
               <h4 className="text-sm font-bold text-[#2c3e50] uppercase tracking-wider">
-                Giải thích chi tiết từng câu hỏi:
+                Bài làm của bạn:
               </h4>
               {quiz.questions.map((q, idx) => {
-                const userAns = selectedAnswers[q.id];
-                const isCorrect = userAns === q.correctAnswer;
+                const chosenKey = selectedAnswers[q.id];
+                const chosenOption = q.options.find(option => option.key === chosenKey);
                 return (
                   <div key={q.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2 text-xs">
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="font-bold text-slate-800 text-sm">
-                        {idx + 1}. {q.question}
-                      </span>
-                      <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-                        isCorrect ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
-                      }`}>
-                        {isCorrect ? 'Đúng' : 'Sai'}
-                      </span>
-                    </div>
-
+                    <span className="font-bold text-slate-800 text-sm block">
+                      {idx + 1}. {q.question}
+                    </span>
                     <div className="text-slate-600">
-                      Đáp án bạn chọn: <strong className="text-slate-800">{userAns || 'Chưa chọn'}</strong> | 
-                      Đáp án đúng: <strong className="text-emerald-700 font-bold">{q.correctAnswer}</strong>
+                      Đáp án bạn chọn:{' '}
+                      <strong className="text-slate-800">
+                        {chosenOption ? `${chosenOption.key}. ${chosenOption.text}` : 'Chưa chọn'}
+                      </strong>
                     </div>
-
-                    <p className="text-slate-600 bg-white p-2.5 rounded-lg border border-slate-200 italic">
-                      <strong className="text-slate-700 not-italic">Giải thích: </strong> {q.explanation}
-                    </p>
                   </div>
                 );
               })}

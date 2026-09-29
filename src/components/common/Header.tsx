@@ -24,7 +24,7 @@ interface HeaderProps {
   onOpenPublicVerify: () => void;
   notifications: NotificationItem[];
   onMarkAllAsRead: () => void;
-  onSimulateSSE: () => void;
+  onMarkAsRead?: (notificationId: string) => void;
   onSelectNotification?: (item: NotificationItem) => void;
   onOpenAuthModal?: () => void;
 }
@@ -35,7 +35,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenPublicVerify,
   notifications,
   onMarkAllAsRead,
-  onSimulateSSE,
+  onMarkAsRead,
   onSelectNotification,
   onOpenAuthModal
 }) => {
@@ -46,6 +46,9 @@ export const Header: React.FC<HeaderProps> = ({
   // Chỉ hiện lối vào những portal mà vai trò hiện tại được phép dùng
   const showInstructorPortal = canAccessPortal(user?.roles, 'instructor');
   const showAdminPortal = canAccessPortal(user?.roles, 'admin');
+  // QR verification is a public lookup feature for learners/visitors. Staff can
+  // still open a verification link directly, but it should not clutter their workspaces.
+  const showPublicCertificateLookup = currentPortal === 'learner';
 
   useEffect(() => {
     getDeviceFingerprint().then(fp => setFingerprint(fp));
@@ -130,21 +133,21 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Right: Quick Action CTAs & Profile */}
         <div className="flex items-center gap-2 md:gap-3 shrink-0">
           {/* Quick Certificate Verify Link */}
-          <button
+          {showPublicCertificateLookup && <button
             onClick={onOpenPublicVerify}
             className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-[#2c3e50] hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
-            title="Tra cứu chứng chỉ số hóa qua mã băm QR"
+            title="Tra cứu chứng chỉ công khai bằng mã QR"
           >
             <QrCode className="w-4 h-4 text-slate-500" />
-            <span>Xác thực Chứng chỉ</span>
-          </button>
+            <span>Tra cứu chứng chỉ</span>
+          </button>}
 
           {/* Notification Popover */}
           <NotificationPopover
             notifications={notifications}
             onMarkAllAsRead={onMarkAllAsRead}
             onSelectNotification={onSelectNotification}
-            onSimulateNewSSEEvent={onSimulateSSE}
+            onMarkAsRead={onMarkAsRead}
           />
 
           {/* User Profile avatar or Login CTA */}
@@ -270,13 +273,15 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
+        {showPublicCertificateLookup && (
         <button
           onClick={onOpenPublicVerify}
           className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900"
         >
           <QrCode className="w-4 h-4" />
-          Xác thực
+          Tra cứu
         </button>
+        )}
       </div>
     </header>
   );

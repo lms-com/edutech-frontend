@@ -1,47 +1,42 @@
 import React from 'react';
-import { Header } from '../components/common/Header';
+import { AdminHeader } from '../components/admin/AdminHeader';
 import type { PortalType, NotificationItem } from '../types';
 
 interface AdminLayoutProps {
   currentPortal: PortalType;
   onSelectPortal: (portal: PortalType) => void;
-  onOpenLearningRoom: () => void;
-  onOpenCertificate: () => void;
-  onOpenPublicVerify: () => void;
+  onOpenLearningRoom?: () => void;
+  onOpenCertificate?: () => void;
+  onOpenPublicVerify?: () => void;
   notifications: NotificationItem[];
   onMarkAllAsRead: () => void;
-  onSimulateSSE: () => void;
+  onMarkAsRead?: (notificationId: string) => void;
   onSelectNotification?: (item: NotificationItem) => void;
   onOpenAuthModal?: () => void;
+  onBackToLearner?: () => void;
   children: React.ReactNode;
 }
 
 export const AdminLayout: React.FC<AdminLayoutProps> = ({
   currentPortal,
   onSelectPortal,
-  onOpenLearningRoom,
-  onOpenCertificate,
-  onOpenPublicVerify,
   notifications,
   onMarkAllAsRead,
-  onSimulateSSE,
+  onMarkAsRead,
   onSelectNotification,
-  onOpenAuthModal,
+  onBackToLearner,
   children
 }) => {
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-800 flex flex-col font-sans">
-      <Header
+    <div className="min-h-screen bg-[#f1f5f9] text-slate-800 flex flex-col font-sans">
+      <AdminHeader
         currentPortal={currentPortal}
         onSelectPortal={onSelectPortal}
-        onOpenLearningRoom={onOpenLearningRoom}
-        onOpenCertificate={onOpenCertificate}
-        onOpenPublicVerify={onOpenPublicVerify}
         notifications={notifications}
         onMarkAllAsRead={onMarkAllAsRead}
-        onSimulateSSE={onSimulateSSE}
+        onMarkAsRead={onMarkAsRead}
         onSelectNotification={onSelectNotification}
-        onOpenAuthModal={onOpenAuthModal}
+        onBackToLearner={onBackToLearner}
       />
 
       <main className="flex-1 py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">

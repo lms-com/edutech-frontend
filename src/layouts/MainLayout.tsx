@@ -12,7 +12,7 @@ interface MainLayoutProps {
   onOpenPublicVerify: () => void;
   notifications: NotificationItem[];
   onMarkAllAsRead: () => void;
-  onSimulateSSE: () => void;
+  onMarkAsRead?: (notificationId: string) => void;
   onSelectNotification?: (item: NotificationItem) => void;
   onOpenAuthModal?: () => void;
   children: React.ReactNode;
@@ -26,7 +26,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   onOpenPublicVerify,
   notifications,
   onMarkAllAsRead,
-  onSimulateSSE,
+  onMarkAsRead,
   onSelectNotification,
   onOpenAuthModal,
   children
@@ -45,7 +45,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
         onOpenPublicVerify={onOpenPublicVerify}
         notifications={notifications}
         onMarkAllAsRead={onMarkAllAsRead}
-        onSimulateSSE={onSimulateSSE}
+        onMarkAsRead={onMarkAsRead}
         onSelectNotification={onSelectNotification}
         onOpenAuthModal={onOpenAuthModal}
       />

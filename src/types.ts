@@ -16,8 +16,9 @@ export interface Lesson {
 export interface QuizQuestion {
   id: string;
   question: string;
-  options: { key: 'A' | 'B' | 'C' | 'D'; text: string }[];
-  correctAnswer: 'A' | 'B' | 'C' | 'D';
+  options: { key: 'A' | 'B' | 'C' | 'D'; text: string; answerId?: string }[];
+  /** Backend ẩn đáp án đúng với học viên; điểm do server chấm từ answerId đã chọn. */
+  correctAnswer?: 'A' | 'B' | 'C' | 'D';
   explanation: string;
 }
 
@@ -53,6 +54,7 @@ export interface Course {
   id: string;
   title: string;
   slug: string;
+  categoryId?: string;
   category: string;
   subcategory: string;
   thumbnail: string;
@@ -62,7 +64,11 @@ export interface Course {
   reviewsCount: number;
   price: number;
   discountPrice?: number;
-  level: 'Cơ bản' | 'Trung cấp' | 'Nâng cao';
+  /**
+   * Backend trả enum tiếng Anh (BEGINNER/INTERMEDIATE/ADVANCED) nên không thể khai
+   * báo là union tiếng Việt. Bộ chuyển đổi ở src/api/mappers dịch sang nhãn hiển thị.
+   */
+  level: string;
   durationHours: number;
   totalLessons: number;
   updatedAt: string;
@@ -70,7 +76,8 @@ export interface Course {
   shortDescription: string;
   whatYouWillLearn: string[];
   sections: CourseSection[];
-  status: 'PUBLISHED' | 'PENDING' | 'REJECTED';
+  /** PUBLISHED / PENDING / DRAFT / REJECTED tuỳ enum phía backend. */
+  status: string;
   rejectionNote?: string;
 }
 
@@ -92,7 +99,11 @@ export interface NotificationItem {
   id: string;
   title: string;
   message: string;
-  type: 'PAYMENT' | 'VIDEO_PROCESSED' | 'CERTIFICATE' | 'SYSTEM';
+  /**
+   * Phản chiếu enum NotificationType của backend:
+   * ORDER_COMPLETED | COURSE_APPROVED | COURSE_REJECTED | COURSE_COMPLETED | OTP_SENT
+   */
+  type: string;
   timestamp: string;
   isRead: boolean;
   link?: string;

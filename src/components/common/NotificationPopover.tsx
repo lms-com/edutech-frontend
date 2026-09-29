@@ -1,35 +1,43 @@
 import React, { useState } from 'react';
 import type { NotificationItem } from '../../types';
-import { Bell, Check, Award, CreditCard, Video, ShieldCheck, X } from 'lucide-react';
+import { Bell, Check, Award, CreditCard, ShieldCheck, X, CheckCircle2, XCircle, Inbox } from 'lucide-react';
 
 interface NotificationPopoverProps {
   notifications: NotificationItem[];
   onMarkAllAsRead: () => void;
+  onMarkAsRead?: (notificationId: string) => void;
   onSelectNotification?: (item: NotificationItem) => void;
-  onSimulateNewSSEEvent: () => void;
 }
+
+/**
+ * Biểu tượng theo đúng enum NotificationType của backend.
+ * Trước đây backend bị ép về 4 loại tự chế nên các loại thật đều rơi vào mặc định.
+ */
+const getIcon = (type: string) => {
+  switch (type) {
+    case 'ORDER_COMPLETED':
+      return <CreditCard className="w-4 h-4 text-blue-500" />;
+    case 'COURSE_COMPLETED':
+      return <Award className="w-4 h-4 text-emerald-500" />;
+    case 'COURSE_APPROVED':
+      return <CheckCircle2 className="w-4 h-4 text-emerald-600" />;
+    case 'COURSE_REJECTED':
+      return <XCircle className="w-4 h-4 text-rose-500" />;
+    case 'OTP_SENT':
+      return <ShieldCheck className="w-4 h-4 text-indigo-500" />;
+    default:
+      return <ShieldCheck className="w-4 h-4 text-purple-500" />;
+  }
+};
 
 export const NotificationPopover: React.FC<NotificationPopoverProps> = ({
   notifications,
   onMarkAllAsRead,
-  onSelectNotification,
-  onSimulateNewSSEEvent
+  onMarkAsRead,
+  onSelectNotification
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const unreadCount = notifications.filter(n => !n.isRead).length;
-
-  const getIcon = (type: NotificationItem['type']) => {
-    switch (type) {
-      case 'CERTIFICATE':
-        return <Award className="w-4 h-4 text-emerald-500" />;
-      case 'PAYMENT':
-        return <CreditCard className="w-4 h-4 text-blue-500" />;
-      case 'VIDEO_PROCESSED':
-        return <Video className="w-4 h-4 text-amber-500" />;
-      default:
-        return <ShieldCheck className="w-4 h-4 text-purple-500" />;
-    }
-  };
 
   return (
     <div className="relative">
@@ -77,56 +85,58 @@ export const NotificationPopover: React.FC<NotificationPopoverProps> = ({
           <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs text-slate-600">
             <button
               onClick={onMarkAllAsRead}
-              className="text-[#2c3e50] hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+              disabled={unreadCount === 0}
+              className="text-[#2c3e50] hover:underline font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:no-underline"
             >
               <Check className="w-3.5 h-3.5 text-emerald-600" />
-              Đánh dấu đã đọc
+              Đánh dấu tất cả đã đọc
             </button>
-
-            <button
-              onClick={onSimulateNewSSEEvent}
-              className="text-[#e74c3c] hover:underline font-semibold text-[11px] cursor-pointer"
-              title="Cập nhật thêm thông báo mẫu mới"
-            >
-              + Thông báo mới
-            </button>
+            <span className="text-[11px] text-slate-400">{notifications.length} thông báo</span>
           </div>
 
           {/* Notifications List */}
           <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
-            {notifications.map(item => (
-              <div
-                key={item.id}
-                onClick={() => {
-                  if (onSelectNotification) onSelectNotification(item);
-                  setIsOpen(false);
-                }}
-                className={`p-3.5 hover:bg-slate-50 cursor-pointer transition-colors flex items-start gap-3 ${
-                  !item.isRead ? 'bg-amber-50/40' : ''
-                }`}
-              >
-                <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
-                  {getIcon(item.type)}
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-1">
-                    <h4 className={`text-xs font-bold leading-tight ${!item.isRead ? 'text-[#2c3e50]' : 'text-slate-700'}`}>
-                      {item.title}
-                    </h4>
-                    {!item.isRead && (
-                      <span className="w-2 h-2 rounded-full bg-[#e74c3c] shrink-0"></span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-slate-600 mt-1 leading-snug line-clamp-2">
-                    {item.message}
-                  </p>
-                  <span className="text-[10px] text-slate-400 mt-1.5 block">
-                    {item.timestamp}
-                  </span>
-                </div>
+            {notifications.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-500 flex flex-col items-center gap-2">
+                <Inbox className="w-8 h-8 text-slate-300" />
+                Chưa có thông báo nào.
               </div>
-            ))}
+            ) : (
+              notifications.map(item => (
+                <div
+                  key={item.id}
+                  onClick={() => {
+                    if (!item.isRead && onMarkAsRead) onMarkAsRead(item.id);
+                    if (onSelectNotification) onSelectNotification(item);
+                    setIsOpen(false);
+                  }}
+                  className={`p-3.5 hover:bg-slate-50 cursor-pointer transition-colors flex items-start gap-3 ${
+                    !item.isRead ? 'bg-amber-50/40' : ''
+                  }`}
+                >
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+                    {getIcon(item.type)}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <h4 className={`text-xs font-bold leading-tight ${!item.isRead ? 'text-[#2c3e50]' : 'text-slate-700'}`}>
+                        {item.title}
+                      </h4>
+                      {!item.isRead && (
+                        <span className="w-2 h-2 rounded-full bg-[#e74c3c] shrink-0"></span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-600 mt-1 leading-snug line-clamp-2">
+                      {item.message}
+                    </p>
+                    <span className="text-[10px] text-slate-400 mt-1.5 block">
+                      {item.timestamp}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
 
           <div className="p-2.5 bg-slate-50 border-t border-slate-200 text-center">
@@ -139,3 +149,5 @@ export const NotificationPopover: React.FC<NotificationPopoverProps> = ({
     </div>
   );
 };
+
+export default NotificationPopover;

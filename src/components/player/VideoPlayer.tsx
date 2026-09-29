@@ -1,13 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Play, Pause, Volume2, VolumeX, Maximize2, ShieldCheck, CheckCircle2, Sparkles } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize2, ShieldCheck, CheckCircle2, Sparkles, Video, AlertCircle, Loader2 } from 'lucide-react';
 import Hls from 'hls.js';
+import courseApi from '../../api/courseApi';
 
 interface VideoPlayerProps {
   lessonId: string;
   lessonTitle: string;
   mediaId: string;
   isEncrypted: boolean;
-  videoUrl?: string;
   onLessonComplete: (lessonId: string) => void;
   isCompleted?: boolean;
 }
@@ -15,7 +15,7 @@ interface VideoPlayerProps {
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   lessonId,
   mediaId,
-  videoUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+  isEncrypted,
   onLessonComplete,
   isCompleted = false
 }) => {
@@ -30,6 +30,25 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [playbackRate, setPlaybackRate] = useState(1);
   const [progressPercent, setProgressPercent] = useState(0);
   const [completedTriggered, setCompletedTriggered] = useState(isCompleted);
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
+  const [resolvedVideoUrl, setResolvedVideoUrl] = useState<string | null>(null);
+
+  // Never use a video URL embedded in course metadata. Ask the server for a
+  // short-lived play URL; course-service checks enrollment/ownership first.
+  useEffect(() => {
+    let cancelled = false;
+    setPlaybackError(null);
+    setResolvedVideoUrl(null);
+    void courseApi.getLessonPlayUrl(lessonId)
+      .then(url => { if (!cancelled) setResolvedVideoUrl(url); })
+      .catch((err: any) => {
+        if (cancelled) return;
+        setPlaybackError(err?.status === 403
+          ? 'Bạn cần có quyền học đang hoạt động để xem bài giảng này.'
+          : err?.message || 'Không lấy được quyền phát video. Vui lòng thử lại.');
+      });
+    return () => { cancelled = true; };
+  }, [lessonId]);
 
   // Ngưỡng hoàn thành bài học theo đặc tả THẺ 6: tự động hoàn thành khi xem đạt từ 80%
   const COMPLETION_THRESHOLD = 80;
@@ -37,7 +56,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   // 1. Khởi tạo phát luồng HLS (.m3u8) với Hls.js hoặc fallback native/mp4
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !resolvedVideoUrl) return;
 
     // Hủy phiên HLS cũ nếu đang chạy
     if (hlsRef.current) {
@@ -45,14 +64,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       hlsRef.current = null;
     }
 
-    const isHlsUrl = videoUrl && (videoUrl.includes('.m3u8') || videoUrl.includes('/stream/'));
+    const isHlsUrl = resolvedVideoUrl.includes('.m3u8') || resolvedVideoUrl.includes('/stream/');
 
     if (isHlsUrl && Hls.isSupported()) {
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: true,
       });
-      hls.loadSource(videoUrl);
+      hls.loadSource(resolvedVideoUrl);
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -67,19 +86,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (data.fatal) {
-          console.warn('HLS stream encounter error, fallbacking to direct video:', data);
-          // Fallback to direct src if stream is offline
-          video.src = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+          // Báo lỗi thật cho người học. Trước đây chỗ này âm thầm chuyển sang phát
+          // một video mẫu của Google, nên hỏng luồng mà nhìn như đang chạy bình thường.
+          console.error('Luồng HLS gặp lỗi không phục hồi được:', data);
+          setPlaybackError('Không phát được video bài giảng. Vui lòng thử lại sau.');
         }
       });
 
       hlsRef.current = hls;
     } else if (isHlsUrl && video.canPlayType('application/vnd.apple.mpegurl')) {
       // Hỗ trợ Native HLS trên Safari iOS/macOS
-      video.src = videoUrl;
+      video.src = resolvedVideoUrl;
     } else {
       // Định dạng thông thường hoặc fallback MP4
-      video.src = videoUrl;
+      video.src = resolvedVideoUrl;
     }
 
     return () => {
@@ -88,7 +108,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         hlsRef.current = null;
       }
     };
-  }, [videoUrl, lessonId]);
+  }, [resolvedVideoUrl, lessonId]);
 
   // 2. Khôi phục vị trí lưu dở khi đổi bài học
   useEffect(() => {
@@ -174,19 +194,51 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     return `${mins}:${remainingSecs < 10 ? '0' : ''}${remainingSecs}`;
   };
 
+  // Bài học chưa có video: báo thật thay vì phát một video mẫu không liên quan
+  // (trước đây component mặc định phát video demo của Google khi thiếu videoUrl).
+  if (!resolvedVideoUrl) {
+    return (
+      <div className="relative rounded-2xl overflow-hidden bg-[#0f172a] shadow-2xl border border-slate-800 flex flex-col items-center justify-center aspect-video gap-3">
+        {playbackError ? <AlertCircle className="w-8 h-8 text-amber-400" /> : <Loader2 className="w-8 h-8 animate-spin text-slate-400" />}
+        <p className="text-sm font-semibold text-slate-300">{playbackError || 'Đang xác minh quyền xem bài giảng...'}</p>
+        {!playbackError && <Video className="w-5 h-5 text-slate-600" />}
+      </div>
+    );
+  }
+
   return (
     <div className="relative rounded-2xl overflow-hidden bg-black shadow-2xl border border-slate-800 group">
+      {playbackError && (
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-2 bg-slate-950/85 px-6 text-center">
+          <AlertCircle className="w-8 h-8 text-rose-400" />
+          <p className="text-sm font-semibold text-slate-200">{playbackError}</p>
+          <button
+            onClick={() => {
+              setPlaybackError(null);
+              videoRef.current?.load();
+            }}
+            className="mt-1 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 cursor-pointer"
+          >
+            Thử lại
+          </button>
+        </div>
+      )}
+
       {/* AES-128 Encryption & Security Overlay Header */}
       <div className="absolute top-3 left-3 right-3 z-20 flex items-center justify-between pointer-events-none transition-opacity duration-300">
-        <div className="flex items-center gap-2 bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-700/60 pointer-events-auto shadow-md">
-          <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          <span className="text-xs font-semibold text-slate-200">
-            HLS AES-128 Stream: <span className="text-emerald-400 font-mono text-[11px]">{mediaId}.m3u8</span>
-          </span>
-          <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-mono uppercase">
-            Bảo Mật
-          </span>
-        </div>
+        {isEncrypted ? (
+          <div className="flex items-center gap-2 bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-700/60 pointer-events-auto shadow-md">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs font-semibold text-slate-200">
+              HLS AES-128 Stream: <span className="text-emerald-400 font-mono text-[11px]">{mediaId}.m3u8</span>
+            </span>
+            <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-mono uppercase">
+              Bảo Mật
+            </span>
+          </div>
+        ) : (
+          <div /> /* Không phải luồng mã hoá thì không hiển thị nhãn AES-128 giả */
+        )}
 
         {/* Quick Testing Shortcut */}
         <button

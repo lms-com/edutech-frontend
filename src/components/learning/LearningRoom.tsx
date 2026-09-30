@@ -27,9 +27,10 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
   onBack,
   onOpenCertificate
 }) => {
-  // Find initial lesson
+  // Danh sách bài học và bài kiểm tra
   const allLessons = course.sections.flatMap(s => s.lessons);
-  const totalLessonCount = allLessons.length;
+  const allQuizzes = course.sections.map(s => s.quiz).filter((q): q is Quiz => !!q);
+  const totalItemsCount = allLessons.length + allQuizzes.length;
 
   const [currentLessonId, setCurrentLessonId] = useState<string>(
     allLessons[0]?.id || ''
@@ -55,7 +56,8 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
       try {
         const progress = await enrollmentApi.getEnrollmentProgress(enrollment.id);
         if (!cancelled) {
-          setCompletedLessonIds(progress.filter(item => item.isCompleted).map(item => item.lessonId));
+          const completedFromDb = progress.filter(item => item.isCompleted).map(item => item.lessonId);
+          setCompletedLessonIds(completedFromDb);
         }
       } catch (err: any) {
         if (!cancelled) setProgressError(err?.message || 'Không tải được tiến độ học tập.');
@@ -103,15 +105,16 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
   const currentLesson = allLessons.find(l => l.id === currentLessonId) || allLessons[0];
   const currentLessonIndex = allLessons.findIndex(l => l.id === currentLessonId);
 
-  // Progress calculations
-  const completedCount = completedLessonIds.length;
-  const progressPercent = totalLessonCount > 0 
-    ? Math.min(100, Math.round((completedCount / totalLessonCount) * 100))
+  // Tính toán tiến độ bao gồm cả video bài học và bài kiểm tra Quiz
+  const completedVideoCount = allLessons.filter(l => completedLessonIds.includes(l.id)).length;
+  const completedQuizCount = allQuizzes.filter(q => passedQuizIds.includes(q.id) || completedLessonIds.includes(q.id)).length;
+  const completedCount = completedVideoCount + completedQuizCount;
+  const progressPercent = totalItemsCount > 0 
+    ? Math.min(100, Math.round((completedCount / totalItemsCount) * 100))
     : 0;
   const isAllCompleted = progressPercent === 100;
   /** Chứng chỉ chỉ mở khi đã ghi danh thật và tiến độ đã tải xong từ server */
   const canGetCertificate = isAllCompleted && !!enrollment && !progressLoading;
-
 
   /** Video xem đủ 80% hoặc kết thúc: ghi tiến độ lên server. */
   const handleLessonComplete = async (lessonId: string) => {
@@ -122,12 +125,12 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
       await enrollmentApi.updateLessonProgress(enrollment.id, lessonId, { isCompleted: true });
       const nextCompleted = [...completedLessonIds, lessonId];
       setCompletedLessonIds(nextCompleted);
-      if (nextCompleted.length === totalLessonCount) {
+
+      const nextVideoDone = allLessons.filter(l => nextCompleted.includes(l.id)).length;
+      if (nextVideoDone + completedQuizCount >= totalItemsCount) {
         triggerCompletionConfetti();
       }
     } catch (err: any) {
-      // Cố ý KHÔNG đánh dấu hoàn thành tại chỗ khi server ghi thất bại: nếu đánh
-      // dấu, người học thấy 100% nhưng tải lại trang là mất sạch.
       setProgressError(err?.message || 'Không lưu được tiến độ lên máy chủ.');
     }
   };
@@ -204,7 +207,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                 {progressPercent}%
               </span>
               <span className="text-[11px] text-slate-400 hidden md:inline">
-                ({completedCount}/{totalLessonCount} bài)
+                ({completedCount}/{totalItemsCount} bài)
               </span>
             </div>
 
@@ -458,7 +461,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                 <h3 className="font-bold text-sm text-white">CHƯƠNG MỤC KHÓA HỌC</h3>
               </div>
               <span className="text-[11px] font-mono text-emerald-400 font-bold">
-                {completedCount}/{totalLessonCount} Đạt
+                {completedCount}/{totalItemsCount} Đạt
               </span>
             </div>
 
@@ -622,8 +625,15 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
           enrollmentId={enrollment?.id ?? null}
           onClose={() => setActiveQuiz(null)}
           onQuizPassed={() => {
-            // Điểm do server chấm; ở đây chỉ ghi nhận để đổi trạng thái hiển thị
-            setPassedQuizIds(prev => prev.includes(activeQuiz.id) ? prev : [...prev, activeQuiz.id]);
+            const nextPassed = Array.from(new Set([...passedQuizIds, activeQuiz.id]));
+            setPassedQuizIds(nextPassed);
+            setCompletedLessonIds(prev => Array.from(new Set([...prev, activeQuiz.id])));
+
+            const nextTotalDone = allLessons.filter(l => completedLessonIds.includes(l.id)).length +
+              allQuizzes.filter(q => nextPassed.includes(q.id) || completedLessonIds.includes(q.id)).length;
+            if (nextTotalDone >= totalItemsCount) {
+              triggerCompletionConfetti();
+            }
           }}
         />
       )}

@@ -297,28 +297,29 @@ export default function App() {
   }, [currentUser?.id]);
 
   // 4. Chứng chỉ của tôi (cần đăng nhập)
-  useEffect(() => {
+  const loadCertificates = useCallback(async (): Promise<Certificate[]> => {
     if (!isAuthenticated) {
       setCertificates([]);
-      return;
+      return [];
     }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const list = await notificationApi.getMyCertificates();
-        if (cancelled) return;
-        // Tên khóa học không có trong payload chứng chỉ nên bù từ danh sách đã tải
-        setCertificates(list.map(dto => mapCertificate(dto, {
-          courseTitle: coursesList.find(course => course.id === dto.courseId)?.title,
-          studentName: currentUser?.fullName,
-          studentEmail: currentUser?.email,
-        })));
-      } catch (err) {
-        if (!cancelled) console.warn('Không tải được chứng chỉ:', err);
-      }
-    })();
-    return () => { cancelled = true; };
+    try {
+      const list = await notificationApi.getMyCertificates();
+      const mapped = list.map(dto => mapCertificate(dto, {
+        courseTitle: coursesList.find(course => course.id === dto.courseId)?.title,
+        studentName: currentUser?.fullName,
+        studentEmail: currentUser?.email,
+      }));
+      setCertificates(mapped);
+      return mapped;
+    } catch (err) {
+      console.warn('Không tải được chứng chỉ:', err);
+      return [];
+    }
   }, [isAuthenticated, coursesList, currentUser?.fullName, currentUser?.email]);
+
+  useEffect(() => {
+    void loadCertificates();
+  }, [loadCertificates]);
 
   // 3. Tự động phát hiện và xử lý kết quả thanh toán từ VNPay Callback URL
   useEffect(() => {
@@ -380,11 +381,18 @@ export default function App() {
 
   const certificateToShow = certificateForPreview ?? activeCertificate;
 
-  const handleOpenCertificate = () => {
+  const handleOpenCertificate = async () => {
     // Mở từ header thì bỏ chứng chỉ đang xem trước, quay về chứng chỉ của chính mình
     setCertificateForPreview(null);
     setShowCertificateModal(true);
-    if (activeCertificate) {
+
+    let cert = activeCertificate;
+    if (!cert && isAuthenticated && activeCourse) {
+      const refreshed = await loadCertificates();
+      cert = refreshed.find(c => c.courseId === activeCourse.id) ?? refreshed[0] ?? null;
+    }
+
+    if (cert) {
       try {
         confetti({ particleCount: 70, spread: 60, origin: { y: 0.4 } });
       } catch {

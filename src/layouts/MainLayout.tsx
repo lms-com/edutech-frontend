@@ -10,6 +10,7 @@ interface MainLayoutProps {
   onOpenLearningRoom: () => void;
   onOpenCertificate: () => void;
   onOpenPublicVerify: () => void;
+  onOpenOrderHistory?: () => void;
   notifications: NotificationItem[];
   onMarkAllAsRead: () => void;
   onMarkAsRead?: (notificationId: string) => void;
@@ -24,6 +25,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   onOpenLearningRoom,
   onOpenCertificate,
   onOpenPublicVerify,
+  onOpenOrderHistory,
   notifications,
   onMarkAllAsRead,
   onMarkAsRead,
@@ -43,6 +45,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
         onOpenLearningRoom={onOpenLearningRoom}
         onOpenCertificate={onOpenCertificate}
         onOpenPublicVerify={onOpenPublicVerify}
+        onOpenOrderHistory={onOpenOrderHistory}
         notifications={notifications}
         onMarkAllAsRead={onMarkAllAsRead}
         onMarkAsRead={onMarkAsRead}

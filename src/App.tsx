@@ -14,6 +14,7 @@ import { InstructorCourseManager } from './components/instructor/InstructorCours
 import { AdminPortal } from './components/admin/AdminPortal';
 import { AuthModal } from './components/auth/AuthModal';
 import { PaymentResultView } from './components/payment/PaymentResultView';
+import { OrderHistoryModal } from './components/payment/OrderHistoryModal';
 import { parseVNPayCallback, cleanUrlQueryParams } from './utils/vnpayHelper';
 import { canAccessPortal } from './utils/roles';
 import { getPendingPurchase, clearPendingPurchase } from './utils/pendingPurchase';
@@ -45,6 +46,7 @@ export default function App() {
   const [isInLearningRoom, setIsInLearningRoom] = useState<boolean>(false);
   const [isLearningPreview, setIsLearningPreview] = useState(false);
   const [showCertificateModal, setShowCertificateModal] = useState<boolean>(false);
+  const [showOrderHistoryModal, setShowOrderHistoryModal] = useState<boolean>(false);
   const [publicVerifyHash, setPublicVerifyHash] = useState<string>('');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -147,12 +149,23 @@ export default function App() {
     return detail;
   }, [courseCache]);
 
-  const openCourseDetail = async (course: Course) => {
-    setDetailCourse(course);
+  const openCourseDetail = async (courseOrId: Course | string) => {
     setDetailError(null);
     setDetailLoading(true);
     try {
-      setDetailCourse(await ensureCourseDetail(course));
+      if (typeof courseOrId === 'string') {
+        const cached = courseCache[courseOrId];
+        if (cached) {
+          setDetailCourse(cached);
+        } else {
+          const detail = await courseApi.getCourseById(courseOrId);
+          setCourseCache(prev => ({ ...prev, [detail.id]: detail }));
+          setDetailCourse(detail);
+        }
+      } else {
+        setDetailCourse(courseOrId);
+        setDetailCourse(await ensureCourseDetail(courseOrId));
+      }
     } catch (err: any) {
       // API chi tiết khóa học yêu cầu đăng nhập, nên 401 là trường hợp hay gặp nhất
       setDetailError(err?.code === 401
@@ -481,6 +494,7 @@ export default function App() {
       }
     },
     onOpenAuthModal: () => setIsAuthModalOpen(true),
+    onOpenOrderHistory: () => setShowOrderHistoryModal(true),
   };
 
   return (
@@ -620,6 +634,16 @@ export default function App() {
         onClose={() => setIsAuthModalOpen(false)}
         onSuccess={(targetPortal) => {
           if (targetPortal) handleSelectPortal(targetPortal);
+        }}
+      />
+
+      {/* Modal Lịch sử đơn hàng của học viên */}
+      <OrderHistoryModal
+        isOpen={showOrderHistoryModal}
+        onClose={() => setShowOrderHistoryModal(false)}
+        onSelectCourse={(courseId) => {
+          setShowOrderHistoryModal(false);
+          openCourseDetail(courseId);
         }}
       />
     </>

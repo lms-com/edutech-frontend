@@ -13,7 +13,8 @@ import {
   LogOut,
   Laptop,
   BookOpen,
-  ChevronDown
+  ChevronDown,
+  ShoppingBag
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -22,6 +23,7 @@ interface HeaderProps {
   onOpenLearningRoom: () => void;
   onOpenCertificate: () => void;
   onOpenPublicVerify: () => void;
+  onOpenOrderHistory?: () => void;
   notifications: NotificationItem[];
   onMarkAllAsRead: () => void;
   onMarkAsRead?: (notificationId: string) => void;
@@ -33,6 +35,7 @@ export const Header: React.FC<HeaderProps> = ({
   currentPortal,
   onSelectPortal,
   onOpenPublicVerify,
+  onOpenOrderHistory,
   notifications,
   onMarkAllAsRead,
   onMarkAsRead,
@@ -191,6 +194,15 @@ export const Header: React.FC<HeaderProps> = ({
                       <BookOpen className="w-4 h-4 text-[#e74c3c]" />
                       Trang Học viên
                     </button>
+                    {onOpenOrderHistory && (
+                      <button
+                        onClick={() => { setProfileDropdownOpen(false); onOpenOrderHistory(); }}
+                        className="w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition cursor-pointer"
+                      >
+                        <ShoppingBag className="w-4 h-4 text-amber-500" />
+                        Lịch sử đơn hàng
+                      </button>
+                    )}
                     {showInstructorPortal && (
                       <button
                         onClick={() => { setProfileDropdownOpen(false); onSelectPortal('instructor'); }}

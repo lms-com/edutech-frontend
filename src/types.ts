@@ -153,4 +153,23 @@ export interface VNPayPaymentResult {
   message: string;
 }
 
+export interface OrderItem {
+  id: string;
+  courseId: string;
+  courseName: string;
+  instructorId: string;
+  originalPrice: number;
+  discountAmount: number;
+  finalPrice: number;
+}
+
+export interface OrderSummary {
+  id: string;
+  totalPrice: number;
+  currencyCode: string;
+  status: 'PENDING' | 'CANCELLED' | 'PAID' | 'DELETED';
+  createdAt: string;
+  items: OrderItem[];
+}
+
 export * from './types/auth';

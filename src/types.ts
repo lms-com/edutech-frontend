@@ -111,12 +111,18 @@ export interface NotificationItem {
 
 export interface DeviceSession {
   deviceId: string;
+  deviceFingerprint?: string;
   deviceName: string;
-  ipAddress: string;
-  browser: string;
-  os: string;
+  userId?: string;
+  userEmail?: string;
+  userFullName?: string;
+  ipAddress?: string;
+  browser?: string;
+  os?: string;
   lastActive: string;
+  loginAt?: string;
   isCurrent: boolean;
+  isBlocked?: boolean;
 }
 
 export interface PayoutRequest {

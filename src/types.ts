@@ -146,6 +146,22 @@ export interface ReviewItem {
   comment: string;
 }
 
+export interface RatingSummary {
+  courseId: string;
+  averageRating: number;
+  totalReviews: number;
+  starDistribution: Record<number, number>;
+}
+
+export interface QuizQuestionResult {
+  questionId: string;
+  questionText: string;
+  selectedAnswerId?: string | null;
+  correctAnswerIds: string[];
+  isCorrect: boolean;
+  explanation: string;
+}
+
 export interface VNPayPaymentResult {
   isSuccess: boolean;
   responseCode: string;

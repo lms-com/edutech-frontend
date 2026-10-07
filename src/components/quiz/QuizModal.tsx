@@ -25,6 +25,16 @@ export const QuizModal: React.FC<QuizModalProps> = ({
   const [score, setScore] = useState(0);
   const [hasPassed, setHasPassed] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [questionDetails, setQuestionDetails] = useState<
+    {
+      questionId: string;
+      questionText: string;
+      selectedAnswerId?: string | null;
+      correctAnswerIds: string[];
+      isCorrect: boolean;
+      explanation: string;
+    }[]
+  >([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -93,6 +103,7 @@ export const QuizModal: React.FC<QuizModalProps> = ({
       setScore(result.score);
       setHasPassed(result.isPassed);
       setFeedback(result.feedback ?? null);
+      setQuestionDetails(result.details ?? []);
       setSubmitted(true);
 
       if (result.isPassed) {
@@ -284,7 +295,7 @@ export const QuizModal: React.FC<QuizModalProps> = ({
             </div>
           </div>
         ) : (
-          /* Result Popup & Review Screen */
+          /* Result Popup & Detailed Explanation Screen */
           <div className="p-6 md:p-8 space-y-6 overflow-y-auto">
             <div className={`p-6 rounded-2xl text-center border ${
               hasPassed ? 'bg-emerald-50 border-emerald-300' : 'bg-red-50 border-red-300'
@@ -307,26 +318,82 @@ export const QuizModal: React.FC<QuizModalProps> = ({
               )}
             </div>
 
-            {/* Server không trả về việc từng câu đúng hay sai (tránh lộ đáp án),
-                nên chỉ hiển thị lại lựa chọn của người học. */}
             <div className="space-y-4">
               <h4 className="text-sm font-bold text-[#2c3e50] uppercase tracking-wider">
-                Bài làm của bạn:
+                Chi tiết kết quả & Giải thích đáp án:
               </h4>
               {quiz.questions.map((q, idx) => {
                 const chosenKey = selectedAnswers[q.id];
                 const chosenOption = q.options.find(option => option.key === chosenKey);
+                const detail = questionDetails.find(d => d.questionId === q.id);
+                const isQuestionCorrect = detail ? detail.isCorrect : false;
+                const correctOptions = detail
+                  ? q.options.filter(opt => opt.answerId && detail.correctAnswerIds.includes(opt.answerId))
+                  : [];
+                const explanationText = detail?.explanation || q.explanation;
+
                 return (
-                  <div key={q.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2 text-xs">
-                    <span className="font-bold text-slate-800 text-sm block">
-                      {idx + 1}. {q.question}
-                    </span>
-                    <div className="text-slate-600">
-                      Đáp án bạn chọn:{' '}
-                      <strong className="text-slate-800">
-                        {chosenOption ? `${chosenOption.key}. ${chosenOption.text}` : 'Chưa chọn'}
-                      </strong>
+                  <div
+                    key={q.id}
+                    className={`p-4 rounded-xl border space-y-3 text-xs ${
+                      detail
+                        ? isQuestionCorrect
+                          ? 'border-emerald-200 bg-emerald-50/40'
+                          : 'border-rose-200 bg-rose-50/40'
+                        : 'border-slate-200 bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="font-bold text-slate-800 text-sm">
+                        {idx + 1}. {q.question}
+                      </span>
+                      {detail && (
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-bold text-[11px] shrink-0 ${
+                            isQuestionCorrect
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-rose-100 text-rose-800'
+                          }`}
+                        >
+                          {isQuestionCorrect ? (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              Chính xác
+                            </>
+                          ) : (
+                            <>
+                              <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                              Chưa chính xác
+                            </>
+                          )}
+                        </span>
+                      )}
                     </div>
+
+                    <div className="space-y-1.5 text-slate-700">
+                      <div>
+                        Đáp án bạn chọn:{' '}
+                        <strong className={detail ? (isQuestionCorrect ? 'text-emerald-700' : 'text-rose-700') : 'text-slate-800'}>
+                          {chosenOption ? `${chosenOption.key}. ${chosenOption.text}` : 'Chưa chọn'}
+                        </strong>
+                      </div>
+
+                      {detail && !isQuestionCorrect && correctOptions.length > 0 && (
+                        <div>
+                          Đáp án đúng:{' '}
+                          <strong className="text-emerald-700">
+                            {correctOptions.map(opt => `${opt.key}. ${opt.text}`).join(' | ')}
+                          </strong>
+                        </div>
+                      )}
+                    </div>
+
+                    {explanationText && (
+                      <div className="p-3 rounded-lg bg-white/90 border border-slate-200/80 text-slate-600 leading-relaxed">
+                        <span className="font-bold text-[#2c3e50]">Giải thích: </span>
+                        {explanationText}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -338,6 +405,7 @@ export const QuizModal: React.FC<QuizModalProps> = ({
                 onClick={() => {
                   setSubmitted(false);
                   setSelectedAnswers({});
+                  setQuestionDetails([]);
                   setTimeLeft(quiz.durationMinutes * 60);
                   setCurrentIdx(0);
                 }}

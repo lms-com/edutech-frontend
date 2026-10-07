@@ -210,7 +210,7 @@ export const PaymentResultView: React.FC<PaymentResultViewProps> = ({
               <div className="text-xs text-emerald-950 space-y-1">
                 <p className="font-bold">Cổng thanh toán trả kết quả thành công</p>
                 <p className="text-emerald-800 leading-relaxed">
-                  Hệ thống đang xác nhận ghi danh từ máy chủ. Bạn chỉ có thể vào học sau khi quyền học (Enrollment) được chuyển sang trạng thái kích hoạt.
+                  Giao dịch thành công. Nhấn &apos;Vào phòng học ngay&apos; để bắt đầu học tập.
                 </p>
               </div>
             </div>

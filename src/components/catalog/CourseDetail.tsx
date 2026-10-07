@@ -45,6 +45,11 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
   const [isEnrollingFree, setIsEnrollingFree] = useState(false);
 
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
+  const [ratingSummary, setRatingSummary] = useState<{
+    averageRating: number;
+    totalReviews: number;
+    starDistribution: Record<number, number>;
+  } | null>(null);
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
   const [relatedCourses, setRelatedCourses] = useState<Course[]>([]);
@@ -53,11 +58,21 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewSubmitError, setReviewSubmitError] = useState<string | null>(null);
 
-  // Điểm đánh giá không có trong API khóa học nên tính từ danh sách đánh giá thật
-  const reviewsCount = reviews.length;
-  const rating = reviewsCount > 0
-    ? Math.round((reviews.reduce((sum, review) => sum + review.rating, 0) / reviewsCount) * 10) / 10
+  // Ưu tiên lấy thống kê từ endpoint summary; nếu chưa có thì tính từ danh sách đánh giá
+  const reviewsCount = ratingSummary ? ratingSummary.totalReviews : reviews.length;
+  const rating = ratingSummary
+    ? ratingSummary.averageRating
+    : reviews.length > 0
+    ? Math.round((reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length) * 10) / 10
     : 0;
+
+  const starCounts: Record<number, number> = ratingSummary?.starDistribution ?? {
+    5: reviews.filter(r => r.rating === 5).length,
+    4: reviews.filter(r => r.rating === 4).length,
+    3: reviews.filter(r => r.rating === 3).length,
+    2: reviews.filter(r => r.rating === 2).length,
+    1: reviews.filter(r => r.rating === 1).length,
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -65,8 +80,14 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
       setReviewsLoading(true);
       setReviewsError(null);
       try {
-        const page = await enrollmentApi.getCourseReviews(course.id);
-        if (!cancelled) setReviews(page.items);
+        const [page, summary] = await Promise.all([
+          enrollmentApi.getCourseReviews(course.id),
+          enrollmentApi.getCourseRatingSummary(course.id).catch(() => null),
+        ]);
+        if (!cancelled) {
+          setReviews(page.items);
+          setRatingSummary(summary);
+        }
       } catch (err: any) {
         if (!cancelled) setReviewsError(err?.message || 'Không tải được đánh giá của khóa học.');
       } finally {
@@ -97,6 +118,9 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
       });
       setReviews(current => [review, ...current.filter(item => item.id !== review.id)]);
       setReviewComment('');
+      enrollmentApi.getCourseRatingSummary(course.id)
+        .then(summary => setRatingSummary(summary))
+        .catch(() => null);
     } catch (err: any) {
       setReviewSubmitError(err?.status === 403
         ? 'Bạn cần có quyền học đang hoạt động để gửi đánh giá.'
@@ -302,7 +326,7 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
           )}
 
           {/* Reviews List */}
-          <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-5">
             <div>
               <h2 className="text-lg font-bold text-[#2c3e50]">Đánh giá từ học viên</h2>
               {reviewsCount > 0 && (
@@ -312,7 +336,47 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
               )}
             </div>
 
-            {isEnrolled && (
+            {reviewsCount > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 p-4 rounded-xl bg-slate-50 border border-slate-200 items-center">
+                <div className="text-center sm:border-r sm:border-slate-200 sm:pr-4 space-y-1">
+                  <div className="text-4xl font-black text-[#2c3e50]">{rating.toFixed(1)}</div>
+                  <div className="flex items-center justify-center gap-0.5 text-amber-400">
+                    {[1, 2, 3, 4, 5].map(star => (
+                      <Star
+                        key={star}
+                        className={`w-4 h-4 ${star <= Math.round(rating) ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-[11px] font-medium text-slate-500">{reviewsCount} lượt đánh giá</p>
+                </div>
+
+                <div className="sm:col-span-2 space-y-2">
+                  {[5, 4, 3, 2, 1].map(star => {
+                    const count = starCounts[star] ?? 0;
+                    const percent = reviewsCount > 0 ? Math.round((count / reviewsCount) * 100) : 0;
+                    return (
+                      <div key={star} className="flex items-center gap-2.5 text-xs">
+                        <span className="w-11 font-semibold text-slate-700 flex items-center gap-1 shrink-0">
+                          {star} <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                        </span>
+                        <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-amber-400 rounded-full transition-all duration-300"
+                            style={{ width: `${percent}%` }}
+                          />
+                        </div>
+                        <span className="w-14 text-right text-[11px] text-slate-500 shrink-0">
+                          {count} ({percent}%)
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {isEnrolled ? (
               <form onSubmit={handleSubmitReview} className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
                 <div>
                   <p className="text-xs font-bold text-slate-700">Đánh giá khóa học</p>
@@ -333,6 +397,10 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                   {reviewSubmitting ? 'Đang gửi...' : 'Gửi đánh giá'}
                 </button>
               </form>
+            ) : (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+                Chỉ học viên đã ghi danh và kích hoạt khóa học mới có thể gửi đánh giá và nhận xét.
+              </div>
             )}
 
             {reviewsLoading && (

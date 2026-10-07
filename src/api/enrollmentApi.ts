@@ -1,7 +1,7 @@
 import axiosClient from './axiosClient';
 import { unwrap, unwrapPage, type ApiEnvelope, type PageDto, type PageResult } from './response';
-import { mapReview, type ReviewResponseDto } from './mappers/courseMapper';
-import type { ReviewItem } from '../types';
+import { mapReview, mapRatingSummary, type ReviewResponseDto, type RatingSummaryResponseDto } from './mappers/courseMapper';
+import type { ReviewItem, RatingSummary, QuizQuestionResult } from '../types';
 
 const ENROLLMENT_BASE = '/enrollment-service/api/v1';
 
@@ -26,11 +26,22 @@ export interface LessonProgressDto {
   lastWatchTimeSeconds?: number;
 }
 
+export interface QuizQuestionResultDto {
+  questionId: string;
+  questionText?: string;
+  selectedAnswerId?: string | null;
+  correctAnswerIds?: string[];
+  isCorrect?: boolean;
+  explanation?: string | null;
+}
+
 export interface QuizResultDto {
   lessonId: string;
   score: number;
+  passScore?: number;
   isPassed: boolean;
   feedback?: string;
+  details?: QuizQuestionResult[];
 }
 
 export interface QuizAttemptDto {
@@ -102,6 +113,13 @@ const getCourseReviews = async (
   return { ...page, items: page.items.map(mapReview) };
 };
 
+const getCourseRatingSummary = async (courseId: string): Promise<RatingSummary> => {
+  const res = await axiosClient.get<ApiEnvelope<RatingSummaryResponseDto>>(
+    `${ENROLLMENT_BASE}/reviews/courses/${courseId}/summary`,
+  );
+  return mapRatingSummary(unwrap(res), courseId);
+};
+
 /** Gửi đánh giá. courseId nằm trên đường dẫn, body chỉ có star và comment. */
 const submitReview = async (
   courseId: string,
@@ -123,11 +141,26 @@ const submitQuizAttempt = async (
   quizId: string,
   answers: QuizAnswerPayload[],
 ): Promise<QuizResultDto> => {
-  const res = await axiosClient.post<ApiEnvelope<QuizResultDto>>(
+  const res = await axiosClient.post<ApiEnvelope<QuizResultDto & { details?: QuizQuestionResultDto[] }>>(
     `${ENROLLMENT_BASE}/quiz-attempts/enrollments/${enrollmentId}/quizzes/${quizId}`,
     { answers },
   );
-  return unwrap(res);
+  const raw = unwrap(res);
+  return {
+    lessonId: raw.lessonId,
+    score: Number(raw.score ?? 0),
+    passScore: raw.passScore !== undefined ? Number(raw.passScore) : undefined,
+    isPassed: Boolean(raw.isPassed),
+    feedback: raw.feedback,
+    details: (raw.details ?? []).map(d => ({
+      questionId: d.questionId,
+      questionText: d.questionText ?? '',
+      selectedAnswerId: d.selectedAnswerId ?? null,
+      correctAnswerIds: d.correctAnswerIds ?? [],
+      isCorrect: Boolean(d.isCorrect),
+      explanation: d.explanation ?? '',
+    })),
+  };
 };
 
 const getQuizAttempts = async (enrollmentId: string, quizId: string): Promise<QuizAttemptDto[]> => {
@@ -144,6 +177,7 @@ export const enrollmentApi = {
   getEnrollmentProgress,
   updateLessonProgress,
   getCourseReviews,
+  getCourseRatingSummary,
   submitReview,
   submitQuizAttempt,
   getQuizAttempts,

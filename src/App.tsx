@@ -176,6 +176,27 @@ export default function App() {
     }
   };
 
+  const pollEnrollmentActive = async (
+    courseId: string,
+    maxRetries = 5,
+    delayMs = 800
+  ): Promise<EnrollmentDto | null> => {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const enrollment = await enrollmentApi.findMyEnrollmentForCourse(courseId);
+        if (enrollment && enrollment.status?.toUpperCase() === 'ACTIVE') {
+          return enrollment;
+        }
+      } catch (err) {
+        console.warn(`Lần thử ${i + 1}/${maxRetries} kiểm tra quyền học:`, err);
+      }
+      if (i < maxRetries - 1) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+    return null;
+  };
+
   const enterLearningRoom = async (course: Course, options: { preview?: boolean } = {}): Promise<boolean> => {
     if (!options.preview && !isAuthenticated) {
       setIsAuthModalOpen(true);
@@ -185,14 +206,12 @@ export default function App() {
       // Chỉ enrollment ACTIVE mới được vào học; preview của staff là chế độ chỉ xem.
       let enrollment: EnrollmentDto | null = null;
       if (!options.preview) {
-        enrollment = await enrollmentApi.findMyEnrollmentForCourse(course.id);
-        if (enrollment?.status?.toUpperCase() !== 'ACTIVE') {
+        enrollment = await pollEnrollmentActive(course.id);
+        if (!enrollment || enrollment.status?.toUpperCase() !== 'ACTIVE') {
           setCoursesError('Khóa học chưa được kích hoạt. Hãy hoàn tất thanh toán và chờ hệ thống ghi danh thành công.');
           return false;
         }
-        if (enrollment) {
-          setMyEnrollments(prev => [enrollment!, ...prev.filter(item => item.courseId !== course.id)]);
-        }
+        setMyEnrollments(prev => [enrollment!, ...prev.filter(item => item.courseId !== course.id)]);
       }
       // Chỉ tải cấu trúc chương/bài sau khi xác minh quyền học.
       setActiveCourse(await ensureCourseDetail(course));
@@ -342,6 +361,10 @@ export default function App() {
         setPaymentResult(result);
         cleanUrlQueryParams();
 
+        if (result.isSuccess) {
+          void loadMyEnrollments();
+        }
+
         // Tự động đẩy thông báo vào Notification Dropdown
         const newNotif: NotificationItem = {
           id: `pay_${Date.now()}`,
@@ -354,7 +377,7 @@ export default function App() {
         setNotifications((prev) => [newNotif, ...prev]);
       }
     }
-  }, []);
+  }, [loadMyEnrollments]);
 
   /**
    * Điểm vào cho link QR trên chứng chỉ: /?verify=<qrCodeHash>
@@ -534,10 +557,24 @@ export default function App() {
             <PaymentResultView
               result={paymentResult}
               courseTitle={paymentCourse?.title || 'Khóa học'}
-              courseId={paymentCourse?.id || ''}
-              onStartLearning={async () => {
-                if (paymentCourse) {
-                  const entered = await enterLearningRoom(paymentCourse);
+              courseId={paymentCourse?.id || getPendingPurchase() || ''}
+              onStartLearning={async (courseId?: string) => {
+                let courseToEnter = paymentCourse;
+                if (!courseToEnter) {
+                  const targetId = courseId || getPendingPurchase();
+                  if (targetId) {
+                    courseToEnter = coursesList.find(c => c.id === targetId) || null;
+                    if (!courseToEnter) {
+                      try {
+                        courseToEnter = await courseApi.getCourseById(targetId);
+                      } catch (err) {
+                        console.warn('Không tải được thông tin khóa học:', err);
+                      }
+                    }
+                  }
+                }
+                if (courseToEnter) {
+                  const entered = await enterLearningRoom(courseToEnter);
                   if (entered) {
                     clearPendingPurchase();
                     setPaymentResult(null);
@@ -555,6 +592,7 @@ export default function App() {
                 setPaymentCourse(null);
                 setDetailCourse(null);
                 clearPendingPurchase();
+                void loadMyEnrollments();
               }}
             />
           ) : detailCourse ? (

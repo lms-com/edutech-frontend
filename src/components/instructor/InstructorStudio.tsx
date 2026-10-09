@@ -2,6 +2,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Course, CourseSection, PayoutRequest, InstructorWalletBalance } from '../../types';
 import courseApi from '../../api/courseApi';
 import payoutApi from '../../api/payoutApi';
+import { securityApi } from '../../api/securityApi';
+import { FinancialPinModal } from '../security/FinancialPinModal';
+import { UserSecuritySettingsModal } from '../security/UserSecuritySettingsModal';
 import { formatVND } from '../../utils/format';
 import { 
   Users, 
@@ -24,6 +27,11 @@ import {
   HelpCircle,
   Loader2,
   AlertTriangle,
+  ShieldCheck,
+  ShieldAlert,
+  KeyRound,
+  Lock,
+  Shield,
 } from 'lucide-react';
 
 interface InstructorStudioProps {
@@ -88,6 +96,26 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
   const [payoutSuccessMsg, setPayoutSuccessMsg] = useState('');
   const [payoutSubmitting, setPayoutSubmitting] = useState(false);
 
+  // Financial Security & Step-up PIN State
+  const [financialSessionActive, setFinancialSessionActive] = useState(false);
+  const [financialRemaining, setFinancialRemaining] = useState(0);
+  const [hasPin, setHasPin] = useState(false);
+  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+  const [isSecuritySettingsOpen, setIsSecuritySettingsOpen] = useState(false);
+
+  const checkFinancialStatus = useCallback(async () => {
+    try {
+      const res = await securityApi.getStatus();
+      const data = res.data;
+      setHasPin(Boolean(data?.hasPin));
+      setFinancialSessionActive(Boolean(data?.financialSessionActive));
+      setFinancialRemaining(data?.remainingSeconds || 0);
+      return data;
+    } catch {
+      return null;
+    }
+  }, []);
+
   const loadPayoutData = useCallback(async () => {
     setPayoutLoading(true);
     setPayoutError(null);
@@ -105,6 +133,44 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
       setPayoutLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    let timer: any;
+    if (financialSessionActive && financialRemaining > 0) {
+      timer = setTimeout(() => {
+        setFinancialRemaining(prev => {
+          if (prev <= 1) {
+            setFinancialSessionActive(false);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [financialSessionActive, financialRemaining]);
+
+  const handleFinancialUnlocked = useCallback(() => {
+    setFinancialSessionActive(true);
+    setFinancialRemaining(15 * 60);
+    void loadPayoutData();
+  }, [loadPayoutData]);
+
+  const handleLockFinancialSession = async () => {
+    try {
+      await securityApi.lockSession();
+    } catch {
+      // Ignore
+    }
+    setFinancialSessionActive(false);
+    setFinancialRemaining(0);
+  };
+
+  const formatCountdown = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
 
   const loadCourseData = useCallback(async () => {
     setCurriculumLoading(true);
@@ -130,9 +196,15 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
 
   useEffect(() => {
     if (activeTab === 'payouts') {
-      void loadPayoutData();
+      checkFinancialStatus().then(status => {
+        if (status?.financialSessionActive) {
+          void loadPayoutData();
+        } else {
+          setIsPinModalOpen(true);
+        }
+      });
     }
-  }, [activeTab, loadPayoutData]);
+  }, [activeTab, checkFinancialStatus, loadPayoutData]);
 
   const showSuccess = (msg: string) => {
     setActionSuccessMsg(msg);
@@ -870,11 +942,58 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
 
       {/* TAB 5: WALLET & PAYOUTS (REAL DATA CONNECTED TO FINANCE SERVICE) */}
       {activeTab === 'payouts' && (
-        <div className="space-y-6">
-          {/* Wallet Balance KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white p-5 rounded-2xl border border-emerald-200 shadow-xs relative overflow-hidden">
-              <div className="flex items-center justify-between mb-2">
+        !financialSessionActive ? (
+          <div className="bg-white p-12 rounded-2xl border border-amber-200 text-center max-w-lg mx-auto space-y-4 shadow-xs animate-in fade-in">
+            <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200">
+              <ShieldAlert className="w-8 h-8" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-800">Khu Vực Quản Lý Tiền Đang Được Khóa</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto leading-relaxed">
+                Để bảo vệ an toàn cho doanh thu và tài khoản ngân hàng của giảng viên, vui lòng nhập mã PIN bảo mật cấp 2 để mở khóa phiên làm việc (15 phút).
+              </p>
+            </div>
+            <div className="pt-2 flex flex-col sm:flex-row gap-2 justify-center">
+              <button
+                type="button"
+                onClick={() => setIsPinModalOpen(true)}
+                className="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <KeyRound className="w-4 h-4" />
+                {hasPin ? 'Mở Khóa Bằng Mã PIN Ví' : 'Thiết Lập Mã PIN Lần Đầu'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Session status banner */}
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs animate-in fade-in">
+              <div className="flex items-center gap-2 text-amber-900 font-medium">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Phiên bảo mật ví đang hoạt động (Thời gian còn: <strong className="font-mono text-amber-950 font-bold">{formatCountdown(financialRemaining)}</strong>)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSecuritySettingsOpen(true)}
+                  className="px-2.5 py-1 text-slate-600 hover:text-slate-800 hover:bg-amber-100 rounded-lg transition font-semibold cursor-pointer text-[11px]"
+                >
+                  Đổi PIN / Mật khẩu
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLockFinancialSession}
+                  className="px-2.5 py-1 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition font-bold cursor-pointer text-[11px]"
+                >
+                  Khóa ví ngay
+                </button>
+              </div>
+            </div>
+
+            {/* Wallet Balance KPI Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white p-5 rounded-2xl border border-emerald-200 shadow-xs relative overflow-hidden">
+                <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">Số dư khả dụng</span>
                 <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
                   <Wallet className="w-4 h-4" />
@@ -1107,9 +1226,24 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
               )}
             </div>
           </div>
-        </div>
+          </div>
+        )
       )}
 
+      {/* Security Modals */}
+      <FinancialPinModal
+        isOpen={isPinModalOpen}
+        onClose={() => setIsPinModalOpen(false)}
+        onSuccess={handleFinancialUnlocked}
+        hasPin={hasPin}
+        onPinCreated={() => setHasPin(true)}
+      />
+
+      <UserSecuritySettingsModal
+        isOpen={isSecuritySettingsOpen}
+        onClose={() => setIsSecuritySettingsOpen(false)}
+        onSecurityUpdated={() => void checkFinancialStatus()}
+      />
     </div>
   );
 };

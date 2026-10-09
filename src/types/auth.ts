@@ -78,3 +78,32 @@ export interface GoogleLoginRequest {
   idToken: string;
   deviceFingerPrint: string;
 }
+
+export interface SecurityStatusResponse {
+  hasPin: boolean;
+  financialSessionActive: boolean;
+  remainingSeconds: number;
+}
+
+export interface SetupPinRequest {
+  pin: string;
+}
+
+export interface ChangePinRequest {
+  currentPin: string;
+  newPin: string;
+}
+
+export interface VerifyPinRequest {
+  pin: string;
+}
+
+export interface ResetPinRequest {
+  otp: string;
+  newPin: string;
+}
+
+export interface ChangePasswordWithOtpRequest {
+  otp: string;
+  newPassword: string;
+}

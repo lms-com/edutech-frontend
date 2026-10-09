@@ -1,4 +1,4 @@
-﻿export interface ApiResponse<T> {
+export interface ApiResponse<T> {
   code: number;
   message: string;
   data: T;
@@ -45,4 +45,19 @@ export interface User {
   email: string;
   fullName: string;
   roles: string[];
+}
+
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface VerifyOtpRequest {
+  email: string;
+  otp: string;
+}
+
+export interface ResetPasswordRequest {
+  email: string;
+  otp: string;
+  newPassword: string;
 }

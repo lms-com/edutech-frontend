@@ -1,4 +1,4 @@
-﻿import axiosClient from './axiosClient';
+import axiosClient from './axiosClient';
 import { getDeviceFingerprint } from '../utils/fingerprint';
 import type {
   ApiResponse,
@@ -7,6 +7,9 @@ import type {
   RegisterRequest,
   RegisterResponse,
   UserProfileResponse,
+  ForgotPasswordRequest,
+  VerifyOtpRequest,
+  ResetPasswordRequest,
 } from '../types/auth';
 
 export const authApi = {
@@ -30,5 +33,17 @@ export const authApi = {
   logout: async (): Promise<ApiResponse<void>> => {
     const deviceFingerPrint = await getDeviceFingerprint();
     return axiosClient.post('/iam-service/api/v1/auth/logout', { deviceFingerPrint });
+  },
+
+  forgotPassword: async (data: ForgotPasswordRequest): Promise<ApiResponse<string>> => {
+    return axiosClient.post('/iam-service/api/v1/auth/forgot-password', data);
+  },
+
+  verifyOtp: async (data: VerifyOtpRequest): Promise<ApiResponse<string>> => {
+    return axiosClient.post('/iam-service/api/v1/auth/verify-otp', data);
+  },
+
+  resetPassword: async (data: ResetPasswordRequest): Promise<ApiResponse<string>> => {
+    return axiosClient.post('/iam-service/api/v1/auth/reset-password', data);
   },
 };

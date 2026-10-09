@@ -10,6 +10,8 @@ import type {
   ForgotPasswordRequest,
   VerifyOtpRequest,
   ResetPasswordRequest,
+  RegisterInitRequest,
+  RegisterConfirmRequest,
 } from '../types/auth';
 
 export const authApi = {
@@ -24,6 +26,27 @@ export const authApi = {
 
   register: async (data: RegisterRequest): Promise<ApiResponse<RegisterResponse>> => {
     return axiosClient.post('/iam-service/api/v1/auth/register', data);
+  },
+
+  registerInit: async (data: RegisterInitRequest): Promise<ApiResponse<string>> => {
+    return axiosClient.post('/iam-service/api/v1/auth/register-otp', data);
+  },
+
+  registerConfirm: async (data: Omit<RegisterConfirmRequest, 'deviceFingerPrint'>): Promise<ApiResponse<LoginResponse>> => {
+    const deviceFingerPrint = await getDeviceFingerprint();
+    const payload: RegisterConfirmRequest = {
+      ...data,
+      deviceFingerPrint,
+    };
+    return axiosClient.post('/iam-service/api/v1/auth/verify-register-otp', payload);
+  },
+
+  loginWithGoogle: async (idToken: string): Promise<ApiResponse<LoginResponse>> => {
+    const deviceFingerPrint = await getDeviceFingerprint();
+    return axiosClient.post('/iam-service/api/v1/auth/google', {
+      idToken,
+      deviceFingerPrint,
+    });
   },
 
   getProfile: async (): Promise<ApiResponse<UserProfileResponse>> => {

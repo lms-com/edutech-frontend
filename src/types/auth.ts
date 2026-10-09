@@ -61,3 +61,20 @@ export interface ResetPasswordRequest {
   otp: string;
   newPassword: string;
 }
+
+export interface RegisterInitRequest {
+  email: string;
+  fullName: string;
+  password: string;
+}
+
+export interface RegisterConfirmRequest {
+  email: string;
+  otp: string;
+  deviceFingerPrint?: string;
+}
+
+export interface GoogleLoginRequest {
+  idToken: string;
+  deviceFingerPrint: string;
+}

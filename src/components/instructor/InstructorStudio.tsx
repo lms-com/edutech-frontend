@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Course, CourseSection, PayoutRequest } from '../../types';
-import { MOCK_PAYOUTS } from '../../data/mockData';
+import { Course, CourseSection, PayoutRequest, InstructorWalletBalance } from '../../types';
 import courseApi from '../../api/courseApi';
+import payoutApi from '../../api/payoutApi';
 import { formatVND } from '../../utils/format';
 import { 
   Users, 
@@ -79,12 +79,32 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
   const [uploadStatus, setUploadStatus] = useState<'IDLE' | 'GETTING_PRESIGNED' | 'UPLOADING' | 'FFMPEG_PROCESSING' | 'COMPLETED'>('IDLE');
   const [selectedLessonTitle, setSelectedLessonTitle] = useState('Bài học');
 
-  // Payout Form State
-  const [payoutAmount, setPayoutAmount] = useState('5000000');
-  const [bankName, setBankName] = useState('Vietcombank (Chi nhánh Tân Bình)');
-  const [bankAccount, setBankAccount] = useState('0071001234567');
-  const [payoutList, setPayoutList] = useState<PayoutRequest[]>(MOCK_PAYOUTS);
+  // Payout & Wallet State
+  const [payoutAmount, setPayoutAmount] = useState('500000');
+  const [payoutList, setPayoutList] = useState<PayoutRequest[]>([]);
+  const [walletBalance, setWalletBalance] = useState<InstructorWalletBalance | null>(null);
+  const [payoutLoading, setPayoutLoading] = useState(false);
+  const [payoutError, setPayoutError] = useState<string | null>(null);
   const [payoutSuccessMsg, setPayoutSuccessMsg] = useState('');
+  const [payoutSubmitting, setPayoutSubmitting] = useState(false);
+
+  const loadPayoutData = useCallback(async () => {
+    setPayoutLoading(true);
+    setPayoutError(null);
+    try {
+      const [balanceRes, payoutsRes] = await Promise.all([
+        payoutApi.getMyBalance(),
+        payoutApi.getMyPayoutRequests({ page: 0, size: 20 }),
+      ]);
+      setWalletBalance(balanceRes);
+      setPayoutList(payoutsRes.items);
+    } catch (err: any) {
+      console.error('Lỗi nạp dữ liệu ví & rút tiền:', err);
+      setPayoutError(err?.message || 'Không thể tải thông tin ví và lịch sử rút tiền.');
+    } finally {
+      setPayoutLoading(false);
+    }
+  }, []);
 
   const loadCourseData = useCallback(async () => {
     setCurriculumLoading(true);
@@ -107,6 +127,12 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
   useEffect(() => {
     void loadCourseData();
   }, [loadCourseData]);
+
+  useEffect(() => {
+    if (activeTab === 'payouts') {
+      void loadPayoutData();
+    }
+  }, [activeTab, loadPayoutData]);
 
   const showSuccess = (msg: string) => {
     setActionSuccessMsg(msg);
@@ -268,26 +294,33 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
     }, 800);
   };
 
-  const handleCreatePayoutRequest = (e: React.FormEvent) => {
+  const handleCreatePayoutRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    const amountNum = parseInt(payoutAmount);
-    if (isNaN(amountNum) || amountNum <= 0) return;
+    const amountNum = Number(payoutAmount);
+    if (isNaN(amountNum) || amountNum < 500000) {
+      setPayoutError('Số tiền rút tối thiểu là 500.000 VNĐ theo quy định của hệ thống.');
+      return;
+    }
+    if (walletBalance && walletBalance.availableBalance > 0 && amountNum > walletBalance.availableBalance) {
+      setPayoutError(`Số dư khả dụng hiện tại (${formatVND(walletBalance.availableBalance)}) không đủ để tạo yêu cầu rút này.`);
+      return;
+    }
 
-    const newReq: PayoutRequest = {
-      id: `pay_${Date.now()}`,
-      instructorId: currentCourse.instructor?.id || 'inst_01',
-      instructorName: currentCourse.instructor?.name || 'Giảng viên',
-      amount: amountNum,
-      bankName: bankName,
-      bankAccount: bankAccount,
-      bankOwner: 'GIANG VIEN',
-      status: 'PENDING',
-      requestedAt: 'Vừa xong'
-    };
+    setPayoutSubmitting(true);
+    setPayoutError(null);
+    setPayoutSuccessMsg('');
 
-    setPayoutList([newReq, ...payoutList]);
-    setPayoutSuccessMsg(`[Bản mẫu] Yêu cầu rút ${formatVND(amountNum)} được ghi nhận trên giao diện mô phỏng.`);
-    setTimeout(() => setPayoutSuccessMsg(''), 5000);
+    try {
+      await payoutApi.createPayoutRequest(amountNum);
+      setPayoutSuccessMsg(`Đã gửi yêu cầu rút ${formatVND(amountNum)} thành công. Số tiền đã được tạm khóa và đang chờ Quản trị viên duyệt.`);
+      await loadPayoutData();
+      setTimeout(() => setPayoutSuccessMsg(''), 6000);
+    } catch (err: any) {
+      console.error('Lỗi tạo lệnh rút tiền:', err);
+      setPayoutError(err?.message || 'Không thể tạo yêu cầu rút tiền. Vui lòng kiểm tra tài khoản ngân hàng và số dư ví.');
+    } finally {
+      setPayoutSubmitting(false);
+    }
   };
 
   const statusUpper = (currentCourse.status || 'DRAFT').toUpperCase();
@@ -835,111 +868,248 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
         </div>
       )}
 
-      {/* TAB 5: WALLET & PAYOUTS (MOCK WITH CLEAR NOTICE) */}
+      {/* TAB 5: WALLET & PAYOUTS (REAL DATA CONNECTED TO FINANCE SERVICE) */}
       {activeTab === 'payouts' && (
         <div className="space-y-6">
-          <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
-            <strong>Bản mẫu tính năng Rút tiền:</strong> Controller Payout phía backend hiện là class rỗng. Thao tác gửi yêu cầu dưới đây chỉ cập nhật trên giao diện mô phỏng để minh họa luồng nghiệp vụ.
+          {/* Wallet Balance KPI Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white p-5 rounded-2xl border border-emerald-200 shadow-xs relative overflow-hidden">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">Số dư khả dụng</span>
+                <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+                  <Wallet className="w-4 h-4" />
+                </div>
+              </div>
+              <p className="text-2xl font-black text-emerald-700">
+                {formatVND(walletBalance?.availableBalance ?? 0)}
+              </p>
+              <p className="text-[11px] text-slate-500 mt-1">Có thể tạo lệnh rút tiền ngay</p>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-amber-200 shadow-xs relative overflow-hidden">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-700">Đang chờ rút</span>
+                <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                  <Clock className="w-4 h-4" />
+                </div>
+              </div>
+              <p className="text-2xl font-black text-amber-700">
+                {formatVND(walletBalance?.blockedBalance ?? 0)}
+              </p>
+              <p className="text-[11px] text-slate-500 mt-1">Đang tạm khóa trong lệnh rút</p>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-blue-200 shadow-xs relative overflow-hidden">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-blue-700">Chờ giải phóng</span>
+                <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                  <DollarSign className="w-4 h-4" />
+                </div>
+              </div>
+              <p className="text-2xl font-black text-blue-700">
+                {formatVND(walletBalance?.pendingBalance ?? 0)}
+              </p>
+              <p className="text-[11px] text-slate-500 mt-1">Doanh thu tạm giữ đối soát</p>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs relative overflow-hidden">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-600">Tổng số dư ví</span>
+                <div className="p-2 bg-slate-50 text-slate-600 rounded-xl">
+                  <CreditCard className="w-4 h-4" />
+                </div>
+              </div>
+              <p className="text-2xl font-black text-slate-800">
+                {formatVND(walletBalance?.actualBalance ?? 0)}
+              </p>
+              <p className="text-[11px] text-slate-500 mt-1">Thực tế trong tài khoản</p>
+            </div>
+          </div>
+
+          <div role="status" className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-3.5 text-xs leading-relaxed text-indigo-950 flex items-start gap-2.5">
+            <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-indigo-900">Quy định rút tiền doanh thu giảng viên:</p>
+              <p className="text-indigo-800 text-[11px] mt-0.5">
+                Mỗi lệnh rút tối thiểu 500.000 VNĐ. Số tiền sẽ được tạm khóa từ số dư khả dụng và giải ngân về số tài khoản ngân hàng chính của giảng viên sau khi Quản trị viên duyệt lệnh.
+              </p>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-              <h3 className="font-bold text-base text-[#2c3e50] flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-[#e74c3c]" />
-                Tạo Yêu Cầu Rút Tiền
-              </h3>
+            {/* Form tạo yêu cầu rút */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-emerald-600" />
+                  Tạo Yêu Cầu Rút Tiền
+                </h3>
+              </div>
 
               {payoutSuccessMsg && (
-                <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-xs text-emerald-800 font-medium">
-                  {payoutSuccessMsg}
+                <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-xs text-emerald-800 font-medium flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span>{payoutSuccessMsg}</span>
                 </div>
               )}
 
-              <form onSubmit={handleCreatePayoutRequest} className="space-y-3">
+              {payoutError && (
+                <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-xs text-rose-800 font-medium flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <span>{payoutError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleCreatePayoutRequest} className="space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Số tiền cần rút (VNĐ):
                   </label>
                   <input
                     type="number"
+                    min="500000"
+                    step="10000"
                     value={payoutAmount}
                     onChange={e => setPayoutAmount(e.target.value)}
-                    className="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-bold text-[#2c3e50]"
+                    placeholder="Tối thiểu 500,000"
+                    className="w-full p-2.5 border border-slate-300 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600"
                   />
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {[500000, 1000000, 2000000, 5000000].map(val => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setPayoutAmount(String(val))}
+                        className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold transition cursor-pointer"
+                      >
+                        +{formatVND(val)}
+                      </button>
+                    ))}
+                    {walletBalance && walletBalance.availableBalance >= 500000 && (
+                      <button
+                        type="button"
+                        onClick={() => setPayoutAmount(String(walletBalance.availableBalance))}
+                        className="px-2 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-[10px] font-bold transition cursor-pointer"
+                      >
+                        Rút tất cả
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Ngân hàng thụ hưởng:
-                  </label>
-                  <input
-                    type="text"
-                    value={bankName}
-                    onChange={e => setBankName(e.target.value)}
-                    className="w-full p-2.5 border border-slate-300 rounded-xl text-xs text-slate-700"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Số tài khoản:
-                  </label>
-                  <input
-                    type="text"
-                    value={bankAccount}
-                    onChange={e => setBankAccount(e.target.value)}
-                    className="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-mono text-slate-700"
-                  />
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1">
+                  <p className="font-semibold text-slate-700">Tài khoản nhận tiền:</p>
+                  <p className="text-[11px] text-slate-500">
+                    Hệ thống tự động sử dụng tài khoản ngân hàng chính đã đăng ký trong hồ sơ giảng viên của bạn.
+                  </p>
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full py-3 bg-[#e74c3c] hover:bg-[#c0392b] text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  disabled={payoutSubmitting}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <Send className="w-3.5 h-3.5" />
-                  Gửi Yêu Cầu Chờ Phê Duyệt
+                  {payoutSubmitting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Đang gửi yêu cầu...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-3.5 h-3.5" />
+                      Gửi Lệnh Rút Tiền
+                    </>
+                  )}
                 </button>
               </form>
             </div>
 
-            <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-              <h3 className="font-bold text-base text-[#2c3e50]">Lịch Sử Yêu Cầu Rút Tiền</h3>
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
-                    <tr>
-                      <th className="p-3">Mã GD</th>
-                      <th className="p-3">Số tiền</th>
-                      <th className="p-3">Ngân hàng</th>
-                      <th className="p-3">Trạng thái</th>
-                      <th className="p-3">Thời gian</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {payoutList.map(item => (
-                      <tr key={item.id} className="hover:bg-slate-50">
-                        <td className="p-3 font-mono text-slate-500">{item.id}</td>
-                        <td className="p-3 font-bold text-[#2c3e50]">
-                          {formatVND(item.amount)}
-                        </td>
-                        <td className="p-3 text-slate-600">{item.bankName}</td>
-                        <td className="p-3">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            item.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                          }`}>
-                            {item.status === 'APPROVED' ? 'Đã duyệt chi' : 'Chờ Admin duyệt'}
-                          </span>
-                        </td>
-                        <td className="p-3 text-slate-400">{item.requestedAt}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {/* Bảng lịch sử yêu cầu rút */}
+            <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-base text-slate-900">Lịch Sử Yêu Cầu Rút Tiền</h3>
+                  <p className="text-xs text-slate-500">Theo dõi tiến độ duyệt chi và thông tin giải ngân.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void loadPayoutData()}
+                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer"
+                >
+                  Làm mới
+                </button>
               </div>
+
+              {payoutLoading ? (
+                <div className="p-12 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
+                  <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+                  <span className="text-xs">Đang tải lịch sử rút tiền...</span>
+                </div>
+              ) : payoutList.length === 0 ? (
+                <div className="p-12 text-center text-slate-400 border border-dashed border-slate-200 rounded-xl">
+                  <CreditCard className="w-8 h-8 mx-auto mb-2 opacity-40 text-slate-400" />
+                  <p className="text-xs font-medium">Chưa có yêu cầu rút tiền nào.</p>
+                </div>
+              ) : (
+                <div className="border border-slate-200 rounded-xl overflow-x-auto">
+                  <table className="w-full text-left text-xs min-w-[500px]">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                      <tr>
+                        <th className="p-3">Mã GD</th>
+                        <th className="p-3">Số tiền</th>
+                        <th className="p-3">Ngân hàng</th>
+                        <th className="p-3">Trạng thái</th>
+                        <th className="p-3">Thời gian</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {payoutList.map(item => (
+                        <tr key={item.id} className="hover:bg-slate-50 transition">
+                          <td className="p-3 font-mono text-[11px] text-slate-500">{item.id}</td>
+                          <td className="p-3 font-bold text-emerald-700 text-sm">
+                            {formatVND(item.amount)}
+                          </td>
+                          <td className="p-3 text-slate-600">
+                            <div>{item.bankName}</div>
+                            {item.bankAccount && (
+                              <div className="font-mono text-[11px] text-slate-500">
+                                {item.bankAccount} {item.bankOwner ? `(${item.bankOwner})` : ''}
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                              item.status === 'APPROVED' || item.status === 'SUCCESS'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                : item.status === 'REJECTED'
+                                ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                                : 'bg-amber-100 text-amber-800 border border-amber-200'
+                            }`}>
+                              {item.status === 'APPROVED' || item.status === 'SUCCESS'
+                                ? 'Đã duyệt chi'
+                                : item.status === 'REJECTED'
+                                ? 'Bị từ chối'
+                                : 'Chờ Admin duyệt'}
+                            </span>
+                            {item.rejectReason && (
+                              <p className="text-[10px] text-rose-600 mt-1">Lý do: {item.rejectReason}</p>
+                            )}
+                            {item.bankReferenceNo && (
+                              <p className="text-[10px] text-slate-500 font-mono mt-0.5">Số GD: {item.bankReferenceNo}</p>
+                            )}
+                          </td>
+                          <td className="p-3 text-slate-500 text-[11px]">{item.requestedAt}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 };

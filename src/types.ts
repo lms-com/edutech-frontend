@@ -128,13 +128,24 @@ export interface DeviceSession {
 export interface PayoutRequest {
   id: string;
   instructorId: string;
-  instructorName: string;
+  instructorName?: string;
   amount: number;
+  currencyCode?: string;
   bankName: string;
   bankAccount: string;
   bankOwner: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING' | 'APPROVED' | 'SUCCESS' | 'REJECTED';
   requestedAt: string;
+  processedAt?: string;
+  rejectReason?: string;
+  bankReferenceNo?: string;
+}
+
+export interface InstructorWalletBalance {
+  actualBalance: number;
+  availableBalance: number;
+  blockedBalance: number;
+  pendingBalance: number;
 }
 
 export interface ReviewItem {

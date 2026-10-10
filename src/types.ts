@@ -205,4 +205,25 @@ export interface OrderSummary {
   items: OrderItem[];
 }
 
+export interface InstructorAnalyticsOverview {
+  totalStudents: number;
+  totalCourses: number;
+  thisMonthRevenue: number;
+  lastMonthRevenue: number;
+  growthRate: number;
+  thisMonthSales: number;
+  availableBalance: number;
+  pendingBalance: number;
+  actualBalance: number;
+  allTimeRevenue: number;
+}
+
+export interface RevenueChartPoint {
+  period: string;
+  label: string;
+  revenue: number;
+  grossSales: number;
+  orderCount: number;
+}
+
 export * from './types/auth';

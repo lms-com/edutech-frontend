@@ -1,7 +1,15 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Course, CourseSection, PayoutRequest, InstructorWalletBalance } from '../../types';
+import { 
+  Course, 
+  CourseSection, 
+  PayoutRequest, 
+  InstructorWalletBalance,
+  InstructorAnalyticsOverview,
+  RevenueChartPoint
+} from '../../types';
 import courseApi from '../../api/courseApi';
 import payoutApi from '../../api/payoutApi';
+import instructorAnalyticsApi from '../../api/instructorAnalyticsApi';
 import { securityApi } from '../../api/securityApi';
 import { FinancialPinModal } from '../security/FinancialPinModal';
 import { UserSecuritySettingsModal } from '../security/UserSecuritySettingsModal';
@@ -32,6 +40,11 @@ import {
   KeyRound,
   Lock,
   Shield,
+  BarChart3,
+  TrendingUp,
+  TrendingDown,
+  RefreshCw,
+  BookOpen,
 } from 'lucide-react';
 
 interface InstructorStudioProps {
@@ -95,6 +108,30 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
   const [payoutError, setPayoutError] = useState<string | null>(null);
   const [payoutSuccessMsg, setPayoutSuccessMsg] = useState('');
   const [payoutSubmitting, setPayoutSubmitting] = useState(false);
+
+  // Analytics & KPI State
+  const [analyticsOverview, setAnalyticsOverview] = useState<InstructorAnalyticsOverview | null>(null);
+  const [revenueChartData, setRevenueChartData] = useState<RevenueChartPoint[]>([]);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
+
+  const loadAnalyticsData = useCallback(async () => {
+    setAnalyticsLoading(true);
+    setAnalyticsError(null);
+    try {
+      const [overview, chart] = await Promise.all([
+        instructorAnalyticsApi.getOverview(),
+        instructorAnalyticsApi.getRevenueChart(),
+      ]);
+      setAnalyticsOverview(overview);
+      setRevenueChartData(chart);
+    } catch (err: any) {
+      console.error('Lỗi nạp dữ liệu thống kê giảng viên:', err);
+      setAnalyticsError(err?.message || 'Không thể tải số liệu phân tích doanh thu.');
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, []);
 
   // Financial Security & Step-up PIN State
   const [financialSessionActive, setFinancialSessionActive] = useState(false);
@@ -204,7 +241,10 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
         }
       });
     }
-  }, [activeTab, checkFinancialStatus, loadPayoutData]);
+    if (activeTab === 'dashboard') {
+      void loadAnalyticsData();
+    }
+  }, [activeTab, checkFinancialStatus, loadPayoutData, loadAnalyticsData]);
 
   const showSuccess = (msg: string) => {
     setActionSuccessMsg(msg);
@@ -505,7 +545,7 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
         {[
           { id: 'curriculum', label: 'Soạn giáo trình (Curriculum)', icon: Layers },
           { id: 'settings', label: 'Cài đặt khóa học', icon: Settings },
-          { id: 'dashboard', label: 'Bảng số liệu KPI', icon: Users },
+          { id: 'dashboard', label: 'Thống kê & Doanh thu KPI', icon: BarChart3 },
           { id: 'upload', label: 'Upload Video MinIO (HLS)', icon: UploadCloud },
           { id: 'payouts', label: 'Ví & Yêu cầu Rút tiền', icon: Wallet }
         ].map(t => (
@@ -821,50 +861,250 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
         </div>
       )}
 
-      {/* TAB 3: KPI DASHBOARD (MOCK WITH CLEAR NOTICE) */}
+      {/* TAB 3: LIVE KPI DASHBOARD & REVENUE ANALYTICS */}
       {activeTab === 'dashboard' && (
-        <div className="space-y-6">
-          <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
-            <strong>Bản mẫu giao diện:</strong> Các số liệu thống kê doanh thu và lượt học dưới đây hiện là dữ liệu mẫu trực quan; backend hiện chưa có endpoint tổng hợp KPI theo giảng viên.
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
-              <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
-                <span>Tổng học viên đang học</span>
-                <Users className="w-4 h-4 text-blue-500" />
-              </div>
-              <h3 className="text-2xl font-black text-[#2c3e50]">18,450</h3>
-              <span className="text-[11px] text-emerald-600 font-semibold">+14.2% so với tháng trước</span>
+        <div className="space-y-6 animate-in fade-in">
+          {/* Header Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+            <div>
+              <h3 className="text-base font-bold text-[#2c3e50] flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-indigo-600" />
+                Trung Tâm Phân Tích & Thống Kê Doanh Thu Giảng Viên
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Dữ liệu tài chính, lượt học viên đăng ký và dòng tiền thực tế được đồng bộ trực tiếp từ Finance & Course Service.
+              </p>
             </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
-              <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
-                <span>Doanh thu trong tháng</span>
-                <DollarSign className="w-4 h-4 text-emerald-500" />
-              </div>
-              <h3 className="text-2xl font-black text-[#2c3e50]">64,500,000 đ</h3>
-              <span className="text-[11px] text-emerald-600 font-semibold">82 lượt mua mới</span>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
-              <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
-                <span>Số dư ví khả dụng</span>
-                <Wallet className="w-4 h-4 text-[#e74c3c]" />
-              </div>
-              <h3 className="text-2xl font-black text-[#e74c3c]">18,500,000 đ</h3>
-              <span className="text-[11px] text-slate-400">Sẵn sàng để rút về ngân hàng</span>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
-              <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
-                <span>Điểm đánh giá trung bình</span>
-                <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
-              </div>
-              <h3 className="text-2xl font-black text-[#2c3e50]">4.9 / 5.0</h3>
-              <span className="text-[11px] text-slate-400">Từ 1,240 đánh giá</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void loadAnalyticsData()}
+                disabled={analyticsLoading}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+                title="Làm mới số liệu"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${analyticsLoading ? 'animate-spin' : ''}`} />
+                Làm mới
+              </button>
             </div>
           </div>
+
+          {analyticsError && (
+            <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 font-medium flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{analyticsError}</span>
+            </div>
+          )}
+
+          {analyticsLoading ? (
+            <div className="p-16 text-center text-slate-400 flex flex-col items-center justify-center gap-2 bg-white rounded-2xl border border-slate-200">
+              <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+              <span className="text-xs font-medium">Đang tổng hợp số liệu doanh thu và học viên từ máy chủ...</span>
+            </div>
+          ) : (
+            <>
+              {/* 4 KPI Summary Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                {/* Total Students */}
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2 relative overflow-hidden">
+                  <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
+                    <span>Tổng học viên đã đăng ký</span>
+                    <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                      <Users className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <h3 className="text-2xl font-black text-[#2c3e50]">
+                    {(analyticsOverview?.totalStudents ?? 0).toLocaleString()}
+                  </h3>
+                  <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
+                    <span className="text-blue-600 font-bold">
+                      +{analyticsOverview?.thisMonthSales ?? 0}
+                    </span>
+                    <span>lượt mua trong tháng này</span>
+                  </div>
+                </div>
+
+                {/* This Month Revenue */}
+                <div className="bg-white p-5 rounded-2xl border border-emerald-200 shadow-xs space-y-2 relative overflow-hidden bg-gradient-to-br from-white to-emerald-50/20">
+                  <div className="flex items-center justify-between text-emerald-800 text-xs font-semibold">
+                    <span>Doanh thu tháng này</span>
+                    <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+                      <DollarSign className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <h3 className="text-2xl font-black text-emerald-700">
+                    {formatVND(analyticsOverview?.thisMonthRevenue ?? 0)}
+                  </h3>
+                  <div className="flex items-center gap-1.5 text-[11px]">
+                    <span className={`inline-flex items-center gap-0.5 font-bold px-1.5 py-0.5 rounded ${
+                      (analyticsOverview?.growthRate ?? 0) >= 0 
+                        ? 'bg-emerald-100 text-emerald-800' 
+                        : 'bg-rose-100 text-rose-800'
+                    }`}>
+                      {(analyticsOverview?.growthRate ?? 0) >= 0 ? (
+                        <TrendingUp className="w-3 h-3 text-emerald-700" />
+                      ) : (
+                        <TrendingDown className="w-3 h-3 text-rose-700" />
+                      )}
+                      {(analyticsOverview?.growthRate ?? 0) >= 0 ? '+' : ''}
+                      {analyticsOverview?.growthRate ?? 0}%
+                    </span>
+                    <span className="text-slate-400">so với tháng trước</span>
+                  </div>
+                </div>
+
+                {/* Available Balance */}
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2 relative overflow-hidden">
+                  <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
+                    <span>Số dư ví khả dụng</span>
+                    <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                      <Wallet className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <h3 className="text-2xl font-black text-[#e74c3c]">
+                    {formatVND(analyticsOverview?.availableBalance ?? 0)}
+                  </h3>
+                  <div className="flex items-center justify-between text-[11px] text-slate-500">
+                    <span>Tạm khóa: {formatVND(analyticsOverview?.pendingBalance ?? 0)}</span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('payouts')}
+                      className="text-indigo-600 hover:text-indigo-700 font-bold hover:underline cursor-pointer"
+                    >
+                      Rút tiền →
+                    </button>
+                  </div>
+                </div>
+
+                {/* Total Courses & All Time Revenue */}
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2 relative overflow-hidden">
+                  <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
+                    <span>Tổng khóa học & Doanh thu</span>
+                    <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                      <BookOpen className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <h3 className="text-2xl font-black text-[#2c3e50]">
+                    {analyticsOverview?.totalCourses ?? 0} khóa học
+                  </h3>
+                  <div className="text-[11px] text-slate-500">
+                    Trọn đời: <strong className="text-slate-700 font-bold">{formatVND(analyticsOverview?.allTimeRevenue ?? 0)}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* REVENUE TREND CHART (6 MONTHS) */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4">
+                  <div>
+                    <h4 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-emerald-600" />
+                      Biểu Đồ Xu Hướng Doanh Thu (6 Tháng Gần Nhất)
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Theo dõi số tiền thực nhận (hoa hồng sau khi trừ phí sàn) và tổng số lượt bán khóa học theo từng tháng.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs">
+                    <span className="flex items-center gap-1.5 text-slate-600">
+                      <span className="w-3 h-3 rounded-sm bg-emerald-500 inline-block"></span>
+                      Doanh thu thực nhận
+                    </span>
+                    <span className="flex items-center gap-1.5 text-slate-600">
+                      <span className="w-3 h-3 rounded-sm bg-indigo-200 inline-block"></span>
+                      Tổng doanh số gộp
+                    </span>
+                  </div>
+                </div>
+
+                {/* Visual Chart Bars */}
+                {revenueChartData.length === 0 ? (
+                  <div className="py-12 text-center text-slate-400 text-xs border border-dashed border-slate-200 rounded-xl">
+                    Chưa có dữ liệu giao dịch phát sinh trong 6 tháng gần nhất.
+                  </div>
+                ) : (
+                  <div className="space-y-6 pt-2">
+                    <div className="grid grid-cols-6 gap-2 sm:gap-4 h-56 items-end pb-2 border-b border-slate-200">
+                      {(() => {
+                        const maxVal = Math.max(
+                          ...revenueChartData.map(d => Math.max(d.grossSales, d.revenue)),
+                          1000000
+                        );
+                        return revenueChartData.map((pt, idx) => {
+                          const revPct = Math.min(100, Math.max(6, Math.round((pt.revenue / maxVal) * 100)));
+                          const grossPct = Math.min(100, Math.max(8, Math.round((pt.grossSales / maxVal) * 100)));
+
+                          return (
+                            <div key={pt.period || idx} className="flex flex-col items-center h-full justify-end group relative">
+                              {/* Hover Tooltip */}
+                              <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-16 z-20 bg-slate-900 text-white text-[10px] p-2 rounded-lg shadow-xl pointer-events-none whitespace-nowrap space-y-0.5">
+                                <p className="font-bold text-amber-300">{pt.label}</p>
+                                <p>Thực nhận: <strong>{formatVND(pt.revenue)}</strong></p>
+                                <p className="text-slate-300">Doanh số: {formatVND(pt.grossSales)} ({pt.orderCount} đơn)</p>
+                              </div>
+
+                              <div className="w-full flex items-end justify-center gap-1 sm:gap-2 h-full pb-1">
+                                {/* Gross Sales Bar */}
+                                <div
+                                  style={{ height: `${grossPct}%` }}
+                                  className="w-3 sm:w-5 bg-indigo-100 group-hover:bg-indigo-200 rounded-t-md transition-all duration-500"
+                                  title={`Doanh số gộp: ${formatVND(pt.grossSales)}`}
+                                />
+                                {/* Net Revenue Bar */}
+                                <div
+                                  style={{ height: `${revPct}%` }}
+                                  className="w-4 sm:w-7 bg-emerald-600 group-hover:bg-emerald-500 rounded-t-md transition-all duration-500 shadow-xs relative"
+                                  title={`Thực nhận: ${formatVND(pt.revenue)}`}
+                                >
+                                  {pt.revenue > 0 && (
+                                    <div className="hidden sm:block absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] font-bold text-emerald-800">
+                                      {pt.orderCount > 0 ? `${pt.orderCount}đ` : ''}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              <span className="text-[11px] font-bold text-slate-700 mt-2 block">
+                                {pt.label}
+                              </span>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+
+                    {/* Detailed Data Table for 6 Months */}
+                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                      <table className="w-full text-left text-xs min-w-[500px]">
+                        <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                          <tr>
+                            <th className="p-3">Kỳ báo cáo</th>
+                            <th className="p-3">Doanh thu thực nhận</th>
+                            <th className="p-3">Tổng giá trị doanh số</th>
+                            <th className="p-3 text-right">Lượt mua</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-slate-700">
+                          {revenueChartData.map(pt => (
+                            <tr key={pt.period} className="hover:bg-slate-50/80 transition">
+                              <td className="p-3 font-bold text-slate-900">{pt.label}</td>
+                              <td className="p-3 font-bold text-emerald-700">{formatVND(pt.revenue)}</td>
+                              <td className="p-3 text-slate-600">{formatVND(pt.grossSales)}</td>
+                              <td className="p-3 text-right">
+                                <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 font-bold text-[11px]">
+                                  {pt.orderCount} đơn
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
 

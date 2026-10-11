@@ -28,6 +28,7 @@ import {
   Clock, 
   CreditCard, 
   DollarSign, 
+  Image as ImageIcon,
   KeyRound, 
   Layers, 
   Loader2, 
@@ -38,6 +39,7 @@ import {
   ShieldAlert, 
   ShieldCheck, 
   TrendingUp, 
+  Upload,
   Users, 
   Video, 
   Wallet, 
@@ -92,6 +94,7 @@ export const InstructorCourseManager: React.FC<InstructorCourseManagerProps> = (
   const [categoryId, setCategoryId] = useState(DEFAULT_CATEGORIES[0].id);
   const [price, setPrice] = useState('0');
   const [description, setDescription] = useState('');
+  const [thumbnailUrl, setThumbnailUrl] = useState('');
   const [savingCourse, setSavingCourse] = useState(false);
 
   // Analytics & Breakdown State
@@ -265,6 +268,7 @@ export const InstructorCourseManager: React.FC<InstructorCourseManagerProps> = (
         slug: makeSlug(title),
         categoryId,
         description: description.trim(),
+        thumbnailUrl: thumbnailUrl.trim() || undefined,
         basePrice: Math.max(0, Number(price) || 0),
         currencyCode: 'VND',
         level: 'BEGINNER',
@@ -274,6 +278,7 @@ export const InstructorCourseManager: React.FC<InstructorCourseManagerProps> = (
       setTitle('');
       setPrice('0');
       setDescription('');
+      setThumbnailUrl('');
       onSelectCourse(created);
     } catch (err: any) {
       setCourseError(err?.message || 'Không tạo được khóa học.');
@@ -1150,6 +1155,45 @@ export const InstructorCourseManager: React.FC<InstructorCourseManagerProps> = (
                   className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
                 />
               </label>
+
+              {/* Trường Ảnh bìa khóa học */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700">
+                  Hình ảnh đại diện khóa học (Thumbnail URL)
+                </label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <ImageIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="url"
+                      value={thumbnailUrl}
+                      onChange={e => setThumbnailUrl(e.target.value)}
+                      placeholder="https://images.unsplash.com/... hoặc dán link ảnh trực tiếp"
+                      className="w-full rounded-xl border border-slate-300 pl-9 pr-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
+                    />
+                  </div>
+                </div>
+
+                {/* Preview Thumbnail */}
+                {thumbnailUrl.trim() && (
+                  <div className="relative mt-2 rounded-xl overflow-hidden border border-slate-200 aspect-video max-h-36 bg-slate-100 flex items-center justify-center">
+                    <img 
+                      src={thumbnailUrl} 
+                      alt="Xem trước ảnh bìa" 
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800';
+                      }}
+                    />
+                    <span className="absolute bottom-1.5 right-2 px-2 py-0.5 rounded text-[10px] font-bold bg-black/60 text-white backdrop-blur-xs">
+                      Xem trước ảnh bìa
+                    </span>
+                  </div>
+                )}
+                <p className="text-[10px] text-slate-400">
+                  Dán liên kết hình ảnh tỉ lệ 16:9 (jpg, png, webp). Nếu để trống, hệ thống sẽ sử dụng ảnh mặc định.
+                </p>
+              </div>
 
               <div className="p-3 rounded-xl bg-indigo-50/70 border border-indigo-200 text-xs text-indigo-900 space-y-0.5">
                 <p className="font-bold">Lưu ý sau khi tạo:</p>

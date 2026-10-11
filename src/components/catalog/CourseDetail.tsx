@@ -524,6 +524,17 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                 )}
               </div>
 
+              {/* Cam kết bảo vệ học viên trong 7 ngày */}
+              <div className="p-3.5 bg-gradient-to-r from-emerald-50 to-teal-50/60 border border-emerald-200/80 rounded-2xl space-y-1.5 shadow-2xs">
+                <div className="flex items-center gap-2 text-emerald-800 font-bold text-xs">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Bảo vệ học viên & Hoàn tiền 7 ngày</span>
+                </div>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  Đảm bảo hoàn tiền 100% trong vòng 7 ngày nếu nội dung không đúng cam kết hoặc giảng viên không hỗ trợ. Yên tâm trải nghiệm học tập an toàn.
+                </p>
+              </div>
+
               <div className="space-y-2.5 pt-3 border-t border-slate-100 text-xs text-slate-600 font-medium">
                 {course.totalLessons > 0 && (
                   <div className="flex items-center gap-2.5">

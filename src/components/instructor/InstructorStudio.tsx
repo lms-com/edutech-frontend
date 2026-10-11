@@ -45,6 +45,7 @@ import {
   TrendingDown,
   RefreshCw,
   BookOpen,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 interface InstructorStudioProps {
@@ -93,6 +94,7 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
   const [editDescription, setEditDescription] = useState(initialCourse.shortDescription);
   const [editPrice, setEditPrice] = useState(String(initialCourse.price));
   const [editLevel, setEditLevel] = useState(initialCourse.level || 'Cơ bản');
+  const [editThumbnailUrl, setEditThumbnailUrl] = useState(initialCourse.thumbnail || '');
   const [savingSettings, setSavingSettings] = useState(false);
 
   // Video Upload Simulation State
@@ -292,11 +294,16 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
       const updated = await courseApi.updateCourse(currentCourse.id, {
         title: editTitle.trim(),
         description: editDescription.trim(),
+        thumbnailUrl: editThumbnailUrl.trim() || undefined,
         basePrice: Math.max(0, Number(editPrice) || 0),
         level: levelMap[editLevel] || 'BEGINNER',
       });
-      setCurrentCourse(prev => ({ ...prev, ...updated }));
-      showSuccess('Cập nhật thông tin khóa học thành công!');
+      setCurrentCourse(prev => ({ 
+        ...prev, 
+        ...updated,
+        thumbnail: editThumbnailUrl.trim() || prev.thumbnail 
+      }));
+      showSuccess('Cập nhật thông tin và hình ảnh khóa học thành công!');
     } catch (err: any) {
       setCurriculumError(err?.message || 'Không thể cập nhật khóa học.');
     } finally {
@@ -850,6 +857,43 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
                   <option value="Nâng cao">Nâng cao</option>
                 </select>
               </label>
+            </div>
+
+            {/* Chỉnh sửa Ảnh bìa khóa học */}
+            <div className="space-y-1.5 pt-1">
+              <label className="block text-xs font-bold text-slate-700">
+                Hình ảnh đại diện khóa học (Thumbnail URL)
+              </label>
+              <div className="relative">
+                <ImageIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="url"
+                  value={editThumbnailUrl}
+                  onChange={e => setEditThumbnailUrl(e.target.value)}
+                  placeholder="https://images.unsplash.com/... hoặc dán link ảnh trực tiếp"
+                  className="w-full pl-9 pr-3.5 py-2.5 border border-slate-300 rounded-xl text-xs focus:outline-none focus:border-[#2c3e50]"
+                />
+              </div>
+
+              {/* Preview Thumbnail */}
+              {editThumbnailUrl.trim() && (
+                <div className="relative mt-2 rounded-xl overflow-hidden border border-slate-200 aspect-video max-h-44 bg-slate-100 flex items-center justify-center">
+                  <img
+                    src={editThumbnailUrl}
+                    alt="Xem trước ảnh bìa"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800';
+                    }}
+                  />
+                  <span className="absolute bottom-2 right-2 px-2.5 py-1 rounded-md text-[10px] font-bold bg-black/60 text-white backdrop-blur-xs">
+                    Ảnh bìa đang hiển thị
+                  </span>
+                </div>
+              )}
+              <p className="text-[10px] text-slate-400">
+                Hình ảnh hiển thị với học viên tại trang danh mục và trang chi tiết khóa học.
+              </p>
             </div>
 
             <button

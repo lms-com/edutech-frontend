@@ -112,6 +112,7 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
   // Analytics & KPI State
   const [analyticsOverview, setAnalyticsOverview] = useState<InstructorAnalyticsOverview | null>(null);
   const [revenueChartData, setRevenueChartData] = useState<RevenueChartPoint[]>([]);
+  const [courseBreakdown, setCourseBreakdown] = useState<import('../../types').CourseRevenueBreakdown[]>([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
 
@@ -119,12 +120,14 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
     setAnalyticsLoading(true);
     setAnalyticsError(null);
     try {
-      const [overview, chart] = await Promise.all([
+      const [overview, chart, breakdown] = await Promise.all([
         instructorAnalyticsApi.getOverview(),
         instructorAnalyticsApi.getRevenueChart(),
+        instructorAnalyticsApi.getCourseBreakdown(),
       ]);
       setAnalyticsOverview(overview);
       setRevenueChartData(chart);
+      setCourseBreakdown(breakdown);
     } catch (err: any) {
       console.error('Lỗi nạp dữ liệu thống kê giảng viên:', err);
       setAnalyticsError(err?.message || 'Không thể tải số liệu phân tích doanh thu.');
@@ -1100,6 +1103,68 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
                         </tbody>
                       </table>
                     </div>
+                  </div>
+                )}
+              </div>
+
+              {/* DETAILED COURSE REVENUE BREAKDOWN TABLE */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+                <div>
+                  <h4 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-indigo-600" />
+                    Thống Kê Doanh Thu Chi Tiết Từng Khóa Học
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Số liệu doanh thu gộp, tỷ lệ khấu trừ phí sàn (30%) và doanh thu thực nhận (70%) phân bổ cho từng khóa học.
+                  </p>
+                </div>
+
+                {courseBreakdown.length === 0 ? (
+                  <div className="py-8 text-center text-slate-400 text-xs border border-dashed border-slate-200 rounded-xl">
+                    Chưa có giao dịch phát sinh doanh thu cho các khóa học.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="w-full text-left text-xs min-w-[650px]">
+                      <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                        <tr>
+                          <th className="p-3">Khóa học</th>
+                          <th className="p-3">Giá bán gốc</th>
+                          <th className="p-3 text-center">Lượt bán</th>
+                          <th className="p-3">Doanh thu gộp</th>
+                          <th className="p-3">Phí sàn (30%)</th>
+                          <th className="p-3 text-right">Thực nhận (70%)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-700">
+                        {courseBreakdown.map(item => (
+                          <tr key={item.courseId} className="hover:bg-slate-50/80 transition">
+                            <td className="p-3">
+                              <p className="font-bold text-slate-900">{item.courseTitle}</p>
+                              <p className="text-[10px] text-slate-400 font-mono">ID: {item.courseId}</p>
+                            </td>
+                            <td className="p-3 font-mono text-slate-600">{formatVND(item.basePrice)}</td>
+                            <td className="p-3 text-center">
+                              <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold text-[11px]">
+                                {item.salesCount} đơn
+                              </span>
+                            </td>
+                            <td className="p-3 font-semibold text-slate-800">{formatVND(item.grossRevenue)}</td>
+                            <td className="p-3 text-rose-600 font-medium">-{formatVND(item.platformFee)}</td>
+                            <td className="p-3 text-right font-black text-emerald-700 text-sm">{formatVND(item.netRevenue)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-slate-50 font-bold text-slate-900 border-t border-slate-200">
+                        <tr>
+                          <td className="p-3" colSpan={2}>Tổng cộng:</td>
+                          <td className="p-3 text-center">{courseBreakdown.reduce((sum, i) => sum + i.salesCount, 0)} đơn</td>
+                          <td className="p-3">{formatVND(courseBreakdown.reduce((sum, i) => sum + i.grossRevenue, 0))}</td>
+                          <td className="p-3 text-rose-600">-{formatVND(courseBreakdown.reduce((sum, i) => sum + i.platformFee, 0))}</td>
+                          <td className="p-3 text-right text-emerald-700 text-sm font-black">{formatVND(courseBreakdown.reduce((sum, i) => sum + i.netRevenue, 0))}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
                   </div>
                 )}
               </div>

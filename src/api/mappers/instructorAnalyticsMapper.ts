@@ -21,6 +21,17 @@ export interface RevenueChartPointDto {
   orderCount?: number;
 }
 
+export interface CourseRevenueBreakdownDto {
+  courseId?: string;
+  courseTitle?: string;
+  basePrice?: number;
+  grossRevenue?: number;
+  netRevenue?: number;
+  platformFee?: number;
+  commissionRate?: number;
+  salesCount?: number;
+}
+
 export const mapInstructorAnalyticsOverview = (
   dto?: InstructorAnalyticsOverviewDto | null
 ): InstructorAnalyticsOverview => ({
@@ -43,3 +54,17 @@ export const mapRevenueChartPoint = (dto: RevenueChartPointDto): RevenueChartPoi
   grossSales: Number(dto.grossSales) || 0,
   orderCount: Number(dto.orderCount) || 0,
 });
+
+export const mapCourseRevenueBreakdown = (
+  dto: CourseRevenueBreakdownDto
+): import('../../types').CourseRevenueBreakdown => ({
+  courseId: dto.courseId || '',
+  courseTitle: dto.courseTitle || 'Khóa học',
+  basePrice: Number(dto.basePrice) || 0,
+  grossRevenue: Number(dto.grossRevenue) || 0,
+  netRevenue: Number(dto.netRevenue) || 0,
+  platformFee: Number(dto.platformFee) || 0,
+  commissionRate: Number(dto.commissionRate) || 0.7,
+  salesCount: Number(dto.salesCount) || 0,
+});
+

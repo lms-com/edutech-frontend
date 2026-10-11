@@ -226,4 +226,16 @@ export interface RevenueChartPoint {
   orderCount: number;
 }
 
+export interface CourseRevenueBreakdown {
+  courseId: string;
+  courseTitle: string;
+  basePrice: number;
+  grossRevenue: number;
+  netRevenue: number;
+  platformFee: number;
+  commissionRate: number;
+  salesCount: number;
+}
+
 export * from './types/auth';
+

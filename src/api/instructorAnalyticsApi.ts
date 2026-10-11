@@ -3,10 +3,12 @@ import { unwrap, type ApiEnvelope } from './response';
 import {
   mapInstructorAnalyticsOverview,
   mapRevenueChartPoint,
+  mapCourseRevenueBreakdown,
   type InstructorAnalyticsOverviewDto,
   type RevenueChartPointDto,
+  type CourseRevenueBreakdownDto,
 } from './mappers/instructorAnalyticsMapper';
-import type { InstructorAnalyticsOverview, RevenueChartPoint } from '../types';
+import type { InstructorAnalyticsOverview, RevenueChartPoint, CourseRevenueBreakdown } from '../types';
 
 export const instructorAnalyticsApi = {
   /**
@@ -38,6 +40,22 @@ export const instructorAnalyticsApi = {
       return [];
     }
   },
+
+  /**
+   * Lấy thống kê chi tiết doanh thu theo từng khóa học (Gross, Phí sàn, Net thực nhận, Lượt bán)
+   */
+  getCourseBreakdown: async (): Promise<CourseRevenueBreakdown[]> => {
+    try {
+      const res = await axiosClient.get<ApiEnvelope<CourseRevenueBreakdownDto[]>>(
+        '/finance-service/api/v1/instructor/analytics/courses-breakdown'
+      );
+      const dtoList = unwrap(res) || [];
+      return dtoList.map(mapCourseRevenueBreakdown);
+    } catch {
+      return [];
+    }
+  },
 };
 
 export default instructorAnalyticsApi;
+

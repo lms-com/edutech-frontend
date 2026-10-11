@@ -8,14 +8,16 @@ interface UserSecuritySettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSecurityUpdated?: () => void;
+  initialTab?: 'pin' | 'password';
 }
 
 export const UserSecuritySettingsModal: React.FC<UserSecuritySettingsModalProps> = ({
   isOpen,
   onClose,
   onSecurityUpdated,
+  initialTab = 'pin',
 }) => {
-  const [activeTab, setActiveTab] = useState<'pin' | 'password'>('pin');
+  const [activeTab, setActiveTab] = useState<'pin' | 'password'>(initialTab);
   const [hasPin, setHasPin] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -37,10 +39,13 @@ export const UserSecuritySettingsModal: React.FC<UserSecuritySettingsModalProps>
 
   useEffect(() => {
     if (isOpen) {
+      if (initialTab) {
+        setActiveTab(initialTab);
+      }
       loadSecurityStatus();
       resetForm();
     }
-  }, [isOpen]);
+  }, [isOpen, initialTab]);
 
   useEffect(() => {
     let timer: any;

@@ -18,8 +18,10 @@ import {
   KeyRound,
   Lock,
   ShieldCheck,
+  HelpCircle,
 } from 'lucide-react';
 import { UserSecuritySettingsModal } from '../security/UserSecuritySettingsModal';
+import { UserGuideModal } from './UserGuideModal';
 
 interface HeaderProps {
   currentPortal: PortalType;
@@ -51,6 +53,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [fingerprint, setFingerprint] = useState<string>('');
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
   const [securityInitialTab, setSecurityInitialTab] = useState<'pin' | 'password'>('password');
+  const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Chỉ hiện lối vào những portal mà vai trò hiện tại được phép dùng
@@ -157,6 +160,16 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right: Quick Action CTAs & Profile */}
         <div className="flex items-center gap-2 md:gap-3 shrink-0">
+          {/* Nút Hướng dẫn sử dụng toàn diện */}
+          <button
+            onClick={() => setIsGuideModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-[#2c3e50] hover:bg-slate-100 rounded-xl transition-all cursor-pointer border border-slate-200/60 shadow-2xs"
+            title="Xem hướng dẫn sử dụng chi tiết dành cho học viên và giảng viên"
+          >
+            <HelpCircle className="w-4 h-4 text-indigo-600" />
+            <span>Hướng dẫn</span>
+          </button>
+
           {/* Quick Certificate Verify Link */}
           {showPublicCertificateLookup && <button
             onClick={onOpenPublicVerify}
@@ -375,6 +388,13 @@ export const Header: React.FC<HeaderProps> = ({
         isOpen={isSecurityModalOpen}
         initialTab={securityInitialTab}
         onClose={() => setIsSecurityModalOpen(false)}
+      />
+
+      {/* Global User Guide Modal */}
+      <UserGuideModal
+        isOpen={isGuideModalOpen}
+        onClose={() => setIsGuideModalOpen(false)}
+        defaultRole={canAccessPortal(user?.roles, 'instructor') ? 'instructor' : 'learner'}
       />
     </header>
   );

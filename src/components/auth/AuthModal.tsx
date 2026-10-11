@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, LogIn, UserPlus, Laptop, Lock, Mail, User as UserIcon, 
-  AlertCircle, CheckCircle2, ArrowRight, KeyRound, RotateCcw, ArrowLeft
+  AlertCircle, CheckCircle2, ArrowRight, KeyRound, RotateCcw, ArrowLeft, FileText, ShieldCheck
 } from 'lucide-react';
+import { TermsModal } from '../common/TermsModal';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { authApi } from '../../api/authApi';
 import { getDeviceFingerprint } from '../../utils/fingerprint';
@@ -60,6 +61,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
   // Register with OTP state
   const [registerStep, setRegisterStep] = useState<1 | 2>(1);
   const [registerOtp, setRegisterOtp] = useState('');
+  const [acceptTerms, setAcceptTerms] = useState(false);
+  const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
 
   // Forgot Password state
   const [forgotStep, setForgotStep] = useState<1 | 2>(1);
@@ -136,6 +139,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
     }
     if (password.length < 6) {
       setErrorMsg('Mật khẩu phải có ít nhất 6 ký tự.');
+      return;
+    }
+    if (!acceptTerms) {
+      setErrorMsg('Vui lòng đọc và đánh dấu đồng ý với Điều khoản dịch vụ & Chính sách của EduTech.');
       return;
     }
 
@@ -539,10 +546,36 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                     </div>
                   </div>
 
+                  {/* Checkbox điều khoản dịch vụ */}
+                  <div className="pt-1">
+                    <label className="flex items-start gap-2.5 cursor-pointer text-slate-700 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={acceptTerms}
+                        onChange={e => setAcceptTerms(e.target.checked)}
+                        className="mt-0.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                      />
+                      <span className="leading-relaxed select-none">
+                        Tôi đã đọc và đồng ý với{' '}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setIsTermsModalOpen(true);
+                          }}
+                          className="text-emerald-700 hover:text-emerald-800 font-bold underline cursor-pointer"
+                        >
+                          Điều khoản dịch vụ & Chính sách của EduTech
+                        </button>
+                      </span>
+                    </label>
+                  </div>
+
                   <button
                     type="submit"
-                    disabled={loading}
-                    className="w-full mt-2 py-2.5 bg-[#2c3e50] hover:bg-[#1a252f] text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
+                    disabled={loading || !acceptTerms}
+                    className="w-full mt-2 py-2.5 bg-[#2c3e50] hover:bg-[#1a252f] text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                   >
                     {loading ? 'Đang gửi mã OTP...' : 'Tiếp tục & Nhận mã OTP Email'}
                     <ArrowRight className="w-4 h-4" />
@@ -748,6 +781,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
           )}
         </div>
       </div>
+
+      {/* Modal xem chi tiết Điều khoản dịch vụ */}
+      <TermsModal
+        isOpen={isTermsModalOpen}
+        onClose={() => setIsTermsModalOpen(false)}
+        onAccept={() => setAcceptTerms(true)}
+      />
     </div>
   );
 };

@@ -148,6 +148,16 @@ export interface InstructorWalletBalance {
   pendingBalance: number;
 }
 
+export interface InstructorBankAccount {
+  id: string;
+  instructorId: string;
+  bankCode: string;
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  isPrimary: boolean;
+}
+
 export interface ReviewItem {
   id: string;
   userName: string;

@@ -4,15 +4,18 @@ import type {
   InstructorAnalyticsOverview, 
   CourseRevenueBreakdown, 
   InstructorWalletBalance, 
-  PayoutRequest 
+  PayoutRequest,
+  InstructorBankAccount
 } from '../../types';
 import courseApi, { type CategoryDto } from '../../api/courseApi';
 import instructorAnalyticsApi from '../../api/instructorAnalyticsApi';
 import payoutApi from '../../api/payoutApi';
+import { bankAccountApi } from '../../api/bankAccountApi';
 import { securityApi } from '../../api/securityApi';
 import { CourseThumbnail } from '../common/CourseThumbnail';
 import { FinancialPinModal } from '../security/FinancialPinModal';
 import { UserSecuritySettingsModal } from '../security/UserSecuritySettingsModal';
+import { BankAccountConnectModal } from './BankAccountConnectModal';
 import { formatVND } from '../../utils/format';
 import { 
   AlertCircle, 
@@ -20,6 +23,7 @@ import {
   ArrowLeft, 
   BarChart3, 
   BookOpen, 
+  Building2,
   CheckCircle2, 
   Clock, 
   CreditCard, 
@@ -100,6 +104,8 @@ export const InstructorCourseManager: React.FC<InstructorCourseManagerProps> = (
   // Wallet & Payout State
   const [walletBalance, setWalletBalance] = useState<InstructorWalletBalance | null>(null);
   const [payoutList, setPayoutList] = useState<PayoutRequest[]>([]);
+  const [bankAccount, setBankAccount] = useState<InstructorBankAccount | null>(null);
+  const [isBankModalOpen, setIsBankModalOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('500000');
   const [loadingWallet, setLoadingWallet] = useState(false);
   const [payoutSubmitting, setPayoutSubmitting] = useState(false);
@@ -165,17 +171,19 @@ export const InstructorCourseManager: React.FC<InstructorCourseManagerProps> = (
     }
   }, []);
 
-  // 4. Load Wallet & Payout Requests
+  // 4. Load Wallet & Payout Requests & Bank Account
   const loadWalletData = useCallback(async () => {
     setLoadingWallet(true);
     setPayoutError(null);
     try {
-      const [balanceRes, payoutsRes] = await Promise.all([
+      const [balanceRes, payoutsRes, bankRes] = await Promise.all([
         payoutApi.getMyBalance(),
         payoutApi.getMyPayoutRequests({ page: 0, size: 20 }),
+        bankAccountApi.getPrimaryBankAccount().catch(() => null),
       ]);
       setWalletBalance(balanceRes);
       setPayoutList(payoutsRes.items);
+      setBankAccount(bankRes);
     } catch (err: any) {
       setPayoutError(err?.message || 'Không thể tải thông tin ví và lịch sử rút tiền.');
     } finally {
@@ -278,6 +286,11 @@ export const InstructorCourseManager: React.FC<InstructorCourseManagerProps> = (
   const handleCreatePayoutRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     const amountNum = Number(payoutAmount);
+    if (!bankAccount) {
+      setPayoutError('Bạn chưa liên kết tài khoản ngân hàng. Vui lòng kết nối tài khoản để nhận tiền.');
+      setIsBankModalOpen(true);
+      return;
+    }
     if (isNaN(amountNum) || amountNum < 500000) {
       setPayoutError('Số tiền rút tối thiểu là 500.000 VNĐ theo quy định.');
       return;
@@ -827,16 +840,55 @@ export const InstructorCourseManager: React.FC<InstructorCourseManagerProps> = (
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1">
-                    <p className="font-semibold text-slate-700">Tài khoản nhận tiền:</p>
-                    <p className="text-[11px] text-slate-500 leading-relaxed">
-                      Hệ thống tự động giải ngân về tài khoản ngân hàng chính đã đăng ký trong hồ sơ giảng viên của bạn sau khi Admin duyệt.
-                    </p>
+                  {/* Khu vực thông tin tài khoản thụ hưởng */}
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <Building2 className="w-3.5 h-3.5 text-indigo-600" /> Tài khoản thụ hưởng:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsBankModalOpen(true)}
+                        className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 underline transition cursor-pointer"
+                      >
+                        {bankAccount ? 'Thay đổi' : 'Liên kết ngay'}
+                      </button>
+                    </div>
+
+                    {bankAccount ? (
+                      <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-extrabold text-slate-900">{bankAccount.bankName}</span>
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            Mặc định
+                          </span>
+                        </div>
+                        <p className="font-mono text-xs font-bold text-indigo-700 tracking-wider">
+                          {bankAccount.accountNumber}
+                        </p>
+                        <p className="text-[11px] font-semibold text-slate-500 uppercase">
+                          {bankAccount.accountName}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3 text-center space-y-2">
+                        <p className="text-xs text-amber-800 font-medium">
+                          Chưa có tài khoản ngân hàng nào được kết nối.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setIsBankModalOpen(true)}
+                          className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1.5"
+                        >
+                          <Building2 className="w-3.5 h-3.5" /> Kết nối tài khoản ngân hàng
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <button
                     type="submit"
-                    disabled={payoutSubmitting}
+                    disabled={payoutSubmitting || !bankAccount}
                     className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     {payoutSubmitting ? (
@@ -990,6 +1042,31 @@ export const InstructorCourseManager: React.FC<InstructorCourseManagerProps> = (
                 Đổi mật khẩu
               </button>
             </div>
+
+            <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/70 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <Building2 className="w-4 h-4 text-indigo-600" />
+                  Tài Khoản Ngân Hàng Nhận Giải Ngân
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  {bankAccount ? (
+                    <span>
+                      Đã liên kết: <strong className="text-slate-800 font-mono">{bankAccount.bankName} - {bankAccount.accountNumber}</strong> ({bankAccount.accountName})
+                    </span>
+                  ) : (
+                    'Chưa kết nối tài khoản ngân hàng thụ hưởng.'
+                  )}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBankModalOpen(true)}
+                className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+              >
+                {bankAccount ? 'Cập nhật' : 'Liên kết ngay'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1116,6 +1193,18 @@ export const InstructorCourseManager: React.FC<InstructorCourseManagerProps> = (
         isOpen={isSecuritySettingsOpen}
         onClose={() => setIsSecuritySettingsOpen(false)}
         onSecurityUpdated={() => void checkFinancialStatus()}
+      />
+
+      {/* Modal Liên kết / Cập nhật tài khoản ngân hàng */}
+      <BankAccountConnectModal
+        isOpen={isBankModalOpen}
+        onClose={() => setIsBankModalOpen(false)}
+        currentAccount={bankAccount}
+        onSaved={account => {
+          setBankAccount(account);
+          setPayoutSuccessMsg(`Đã lưu tài khoản ngân hàng ${account.bankName} (${account.accountNumber}) thành công!`);
+          setTimeout(() => setPayoutSuccessMsg(''), 5000);
+        }}
       />
     </div>
   );

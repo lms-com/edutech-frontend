@@ -67,7 +67,23 @@ export const PaymentResultView: React.FC<PaymentResultViewProps> = ({
         // Ignore confetti if not supported
       }
     }
-  }, [result.isSuccess]);
+
+    // Thông báo cho Tab chính (nếu trang này được mở ở tab con / popup)
+    if (result) {
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage({ type: 'VNPAY_PAYMENT_COMPLETED', result }, '*');
+        }
+        if (typeof BroadcastChannel !== 'undefined') {
+          const bc = new BroadcastChannel('edutech_payment');
+          bc.postMessage({ type: 'VNPAY_PAYMENT_COMPLETED', result });
+          bc.close();
+        }
+      } catch (e) {
+        console.warn('Không thể gửi postMessage sang tab gốc:', e);
+      }
+    }
+  }, [result]);
 
   const formatVND = (num?: number) => {
     if (num === undefined || num === null) return '0 ₫';
@@ -254,6 +270,17 @@ export const PaymentResultView: React.FC<PaymentResultViewProps> = ({
               >
                 <RotateCcw className="w-4 h-4" />
                 <span>Thực hiện thanh toán lại</span>
+              </button>
+            )}
+
+            {/* Nếu mở ở tab mới (Phương án 1), cung cấp nút đóng tab tiện lợi */}
+            {typeof window !== 'undefined' && window.opener && (
+              <button
+                type="button"
+                onClick={() => window.close()}
+                className="w-full py-3 px-6 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs transition-colors flex items-center justify-center gap-2 border border-emerald-200 cursor-pointer"
+              >
+                <span>Đóng tab này và quay lại trang học</span>
               </button>
             )}
 

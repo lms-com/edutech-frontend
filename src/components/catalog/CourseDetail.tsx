@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
+import { PaymentWaitingModal } from '../payment/PaymentWaitingModal';
 import type { Course, ReviewItem } from '../../types';
 import orderApi from '../../api/orderApi';
 import enrollmentApi from '../../api/enrollmentApi';
@@ -57,6 +58,12 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
   const [reviewComment, setReviewComment] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewSubmitError, setReviewSubmitError] = useState<string | null>(null);
+
+  // Trạng thái mở tab thanh toán VNPay và chờ xác nhận quyền học
+  const [isWaitingPaymentOpen, setIsWaitingPaymentOpen] = useState(false);
+  const [waitingPaymentUrl, setWaitingPaymentUrl] = useState('');
+  const [isCheckingEnrollment, setIsCheckingEnrollment] = useState(false);
+  const pollingRef = useRef<number | null>(null);
 
   // Ưu tiên lấy thống kê từ endpoint summary; nếu chưa có thì tính từ danh sách đánh giá
   const reviewsCount = ratingSummary ? ratingSummary.totalReviews : reviews.length;
@@ -130,6 +137,82 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
     }
   };
 
+  const checkEnrollmentStatus = async (showErrorToast = false): Promise<boolean> => {
+    setIsCheckingEnrollment(true);
+    try {
+      const enrollment = await enrollmentApi.findMyEnrollmentForCourse(course.id);
+      if (enrollment && enrollment.status?.toUpperCase() === 'ACTIVE') {
+        setIsWaitingPaymentOpen(false);
+        if (pollingRef.current) {
+          window.clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
+        onStartLearning(course);
+        return true;
+      }
+      if (showErrorToast) {
+        setCheckoutError('Hệ thống chưa nhận được thông tin kích hoạt. Nếu bạn vừa thanh toán, vui lòng chờ trong giây lát rồi bấm lại.');
+      }
+      return false;
+    } catch (err: any) {
+      if (showErrorToast) {
+        setCheckoutError(err?.message || 'Không thể kiểm tra trạng thái khóa học.');
+      }
+      return false;
+    } finally {
+      setIsCheckingEnrollment(false);
+    }
+  };
+
+  // Lắng nghe tín hiệu từ tab con VNPay gửi về qua BroadcastChannel và postMessage
+  useEffect(() => {
+    if (!isWaitingPaymentOpen) {
+      if (pollingRef.current) {
+        window.clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+      return;
+    }
+
+    const handleMessageEvent = (event: MessageEvent) => {
+      if (event.data?.type === 'VNPAY_PAYMENT_COMPLETED') {
+        void checkEnrollmentStatus();
+      }
+    };
+
+    window.addEventListener('message', handleMessageEvent);
+
+    let bc: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        bc = new BroadcastChannel('edutech_payment');
+        bc.onmessage = (event) => {
+          if (event.data?.type === 'VNPAY_PAYMENT_COMPLETED') {
+            void checkEnrollmentStatus();
+          }
+        };
+      } catch (err) {
+        console.warn('Không thể khởi tạo BroadcastChannel:', err);
+      }
+    }
+
+    // Polling tự động mỗi 3 giây trong khi modal chờ đang mở
+    pollingRef.current = window.setInterval(() => {
+      void checkEnrollmentStatus();
+    }, 3000);
+
+    return () => {
+      window.removeEventListener('message', handleMessageEvent);
+      if (bc) {
+        bc.close();
+      }
+      if (pollingRef.current) {
+        window.clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [isWaitingPaymentOpen, course.id]);
+
   const handleCheckoutVNPay = async () => {
     setIsCheckingOut(true);
     setCheckoutError(null);
@@ -148,10 +231,13 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
         setCheckoutError('Máy chủ không trả về đường dẫn thanh toán.');
         return;
       }
-      // Nhớ lại khóa học vì bước chuyển sang VNPay sẽ nạp lại toàn bộ trang
+      // Nhớ lại khóa học để hỗ trợ khôi phục dự phòng nếu cần
       rememberPendingPurchase(course.id);
-      // Chuyển sang cổng VNPay sandbox để thanh toán thật
-      window.location.href = response.paymentUrl;
+      setWaitingPaymentUrl(response.paymentUrl);
+      setIsWaitingPaymentOpen(true);
+
+      // Mở cổng VNPay ở Tab mới (Phương án 1) - Giữ tab hiện tại không bị ảnh hưởng URL history
+      window.open(response.paymentUrl, '_blank', 'noopener,noreferrer');
     } catch (err: any) {
       setCheckoutError(err?.message || 'Không tạo được đơn hàng. Kiểm tra bạn đã đăng nhập chưa.');
     } finally {
@@ -561,6 +647,16 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Modal chờ thanh toán VNPay khi mở tab mới */}
+      <PaymentWaitingModal
+        isOpen={isWaitingPaymentOpen}
+        onClose={() => setIsWaitingPaymentOpen(false)}
+        course={course}
+        paymentUrl={waitingPaymentUrl}
+        onCheckStatus={() => void checkEnrollmentStatus(true)}
+        checking={isCheckingEnrollment}
+      />
     </div>
   );
 };

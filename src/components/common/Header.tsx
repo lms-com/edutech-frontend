@@ -19,9 +19,11 @@ import {
   Lock,
   ShieldCheck,
   HelpCircle,
+  Sparkles,
 } from 'lucide-react';
 import { UserSecuritySettingsModal } from '../security/UserSecuritySettingsModal';
 import { UserGuideModal } from './UserGuideModal';
+import { ApplyInstructorModal } from '../instructor/ApplyInstructorModal';
 
 interface HeaderProps {
   currentPortal: PortalType;
@@ -54,6 +56,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
   const [securityInitialTab, setSecurityInitialTab] = useState<'pin' | 'password'>('password');
   const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
+  const [isApplyInstructorOpen, setIsApplyInstructorOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Chỉ hiện lối vào những portal mà vai trò hiện tại được phép dùng
@@ -254,13 +257,21 @@ export const Header: React.FC<HeaderProps> = ({
                         Lịch sử đơn hàng
                       </button>
                     )}
-                    {showInstructorPortal && (
+                    {showInstructorPortal ? (
                       <button
                         onClick={() => { setProfileDropdownOpen(false); onSelectPortal('instructor'); }}
                         className="w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition cursor-pointer"
                       >
                         <Video className="w-4 h-4 text-indigo-600" />
                         Studio Giảng viên
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => { setProfileDropdownOpen(false); setIsApplyInstructorOpen(true); }}
+                        className="w-full px-4 py-2 text-left text-indigo-700 hover:bg-indigo-50/70 flex items-center gap-2.5 transition cursor-pointer font-bold"
+                      >
+                        <Sparkles className="w-4 h-4 text-indigo-600" />
+                        Đăng ký làm Giảng viên
                       </button>
                     )}
                     {showAdminPortal && (
@@ -395,6 +406,15 @@ export const Header: React.FC<HeaderProps> = ({
         isOpen={isGuideModalOpen}
         onClose={() => setIsGuideModalOpen(false)}
         defaultRole={canAccessPortal(user?.roles, 'instructor') ? 'instructor' : 'learner'}
+      />
+
+      {/* Modal nộp đơn làm giảng viên */}
+      <ApplyInstructorModal
+        isOpen={isApplyInstructorOpen}
+        onClose={() => setIsApplyInstructorOpen(false)}
+        onSuccess={() => {
+          // Callback sau khi nộp thành công
+        }}
       />
     </header>
   );

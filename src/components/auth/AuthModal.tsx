@@ -82,6 +82,46 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
   }, [isOpen]);
 
   useEffect(() => {
+    if (!isOpen) return;
+
+    const renderGoogleBtn = () => {
+      const googleClientId = (import.meta.env as any)?.VITE_GOOGLE_CLIENT_ID;
+      if (!googleClientId || !(window as any).google?.accounts?.id) return;
+
+      try {
+        (window as any).google.accounts.id.initialize({
+          client_id: googleClientId.trim(),
+          callback: async (response: any) => {
+            if (response?.credential) {
+              await performGoogleAuth(response.credential);
+            }
+          },
+          auto_select: false,
+        });
+
+        const containerId = tab === 'register' ? 'googleSignUpBtn' : 'googleSignInBtn';
+        const btnContainer = document.getElementById(containerId);
+        if (btnContainer) {
+          btnContainer.innerHTML = '';
+          (window as any).google.accounts.id.renderButton(btnContainer, {
+            theme: 'outline',
+            size: 'large',
+            width: 380,
+            text: tab === 'register' ? 'signup_with' : 'signin_with',
+            shape: 'rectangular',
+            logo_alignment: 'left',
+          });
+        }
+      } catch (err) {
+        console.error('Error rendering Google button:', err);
+      }
+    };
+
+    const timer = setTimeout(renderGoogleBtn, 150);
+    return () => clearTimeout(timer);
+  }, [isOpen, tab, registerStep]);
+
+  useEffect(() => {
     let timer: any;
     if (resendCountdown > 0) {
       timer = setTimeout(() => setResendCountdown(prev => prev - 1), 1000);
@@ -241,26 +281,42 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
 
   const handleGoogleLogin = async () => {
     const googleClientId = (import.meta.env as any)?.VITE_GOOGLE_CLIENT_ID;
-    if (googleClientId && (window as any).google?.accounts?.id) {
-      (window as any).google.accounts.id.initialize({
-        client_id: googleClientId,
-        callback: async (response: any) => {
-          if (response?.credential) {
-            await performGoogleAuth(response.credential);
-          }
-        },
-      });
-      (window as any).google.accounts.id.prompt();
+    if (!googleClientId || googleClientId.trim() === '' || googleClientId.includes('your-google-client-id')) {
+      setErrorMsg('Hệ thống chưa cấu hình Google Client ID (VITE_GOOGLE_CLIENT_ID). Vui lòng cấu hình Client ID từ Google Cloud Console để mở đăng nhập Google thật.');
       return;
     }
 
-    const promptEmail = window.prompt(
-      'Đăng nhập Google OAuth2 (Chế độ Local/Dev):\nNhập địa chỉ Gmail để đăng nhập nhanh:',
-      email.includes('@') ? email : 'learner@gmail.com'
-    );
-    if (!promptEmail || !promptEmail.trim()) return;
+    if (!(window as any).google?.accounts?.id) {
+      setErrorMsg('Chưa tải được thư viện Google Identity Services. Vui lòng kiểm tra kết nối mạng và tải lại trang.');
+      return;
+    }
 
-    await performGoogleAuth(`mock_google_${promptEmail.trim()}`);
+    try {
+      (window as any).google.accounts.id.initialize({
+        client_id: googleClientId.trim(),
+        callback: async (response: any) => {
+          if (response?.credential) {
+            await performGoogleAuth(response.credential);
+          } else {
+            setErrorMsg('Không nhận được token xác thực từ tài khoản Google.');
+          }
+        },
+        auto_select: false,
+        cancel_on_tap_outside: true,
+      });
+
+      // Mở bảng chọn tài khoản Google thật
+      (window as any).google.accounts.id.prompt((notification: any) => {
+        if (notification.isNotDisplayed()) {
+          console.warn('Google One Tap not displayed:', notification.getNotDisplayedReason());
+          setErrorMsg('Trình duyệt đã chặn hiển thị Google popup. Vui lòng kiểm tra cài đặt chặn popup hoặc thử lại.');
+        } else if (notification.isSkippedMoment()) {
+          console.warn('Google One Tap skipped:', notification.getSkippedReason());
+        }
+      });
+    } catch (err: any) {
+      setErrorMsg('Lỗi khởi tạo đăng nhập Google: ' + (err?.message || 'Vui lòng thử lại sau.'));
+    }
   };
 
   const handleSendOtp = async (e?: React.FormEvent) => {
@@ -482,6 +538,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                 </div>
               </div>
 
+              <div id="googleSignInBtn" className="w-full flex justify-center mb-2 min-h-[40px]"></div>
+
               <button
                 type="button"
                 onClick={handleGoogleLogin}
@@ -589,6 +647,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                       <span className="px-2 bg-white text-slate-400">hoặc đăng ký nhanh với</span>
                     </div>
                   </div>
+
+                  <div id="googleSignUpBtn" className="w-full flex justify-center mb-2 min-h-[40px]"></div>
 
                   <button
                     type="button"

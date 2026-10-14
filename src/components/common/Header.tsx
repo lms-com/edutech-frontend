@@ -88,6 +88,8 @@ export const Header: React.FC<HeaderProps> = ({
   const handleLogout = async () => {
     setProfileDropdownOpen(false);
     await logout();
+    onSelectPortal('learner');
+    window.location.reload();
   };
 
   return (

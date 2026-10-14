@@ -35,6 +35,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   const handleLogout = async () => {
     setProfileDropdownOpen(false);
     await logout();
+    window.location.reload();
   };
 
   const handleReturnToLearner = () => {

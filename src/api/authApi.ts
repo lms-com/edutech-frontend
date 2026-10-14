@@ -54,7 +54,7 @@ export const authApi = {
   },
 
   logout: async (): Promise<ApiResponse<void>> => {
-    const deviceFingerPrint = await getDeviceFingerprint();
+    const deviceFingerPrint = (await getDeviceFingerprint()) || 'browser-device';
     return axiosClient.post('/iam-service/api/v1/auth/logout', { deviceFingerPrint });
   },
 

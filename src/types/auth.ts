@@ -15,6 +15,8 @@ export interface LoginResponse {
   userId: string;
   email: string;
   permissions?: string[];
+  isNewUser?: boolean;
+  fullName?: string;
 }
 
 export interface RegisterRequest {
@@ -77,6 +79,7 @@ export interface RegisterConfirmRequest {
 export interface GoogleLoginRequest {
   idToken: string;
   deviceFingerPrint: string;
+  password?: string;
 }
 
 export interface SecurityStatusResponse {

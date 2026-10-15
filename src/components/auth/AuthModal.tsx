@@ -71,6 +71,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
   const [confirmPassword, setConfirmPassword] = useState('');
   const [resendCountdown, setResendCountdown] = useState(0);
 
+  // Google Registration Complete State (Phương án 1)
+  const [googleSetup, setGoogleSetup] = useState<{ idToken: string; email: string; fullName: string } | null>(null);
+  const [googlePassword, setGooglePassword] = useState('');
+  const [googleConfirmPassword, setGoogleConfirmPassword] = useState('');
+  const [googleAcceptTerms, setGoogleAcceptTerms] = useState(false);
+
   const { setToken, fetchCurrentUser } = useAuthStore();
 
   useEffect(() => {
@@ -78,6 +84,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
       getDeviceFingerprint().then(fp => setFingerprint(fp));
       setErrorMsg(null);
       setSuccessMsg(null);
+      setGoogleSetup(null);
+      setGooglePassword('');
+      setGoogleConfirmPassword('');
+      setGoogleAcceptTerms(false);
     }
   }, [isOpen]);
 
@@ -255,6 +265,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
     setSuccessMsg(null);
     try {
       const res = await authApi.loginWithGoogle(idToken);
+      
+      // Nếu là tài khoản Google mới chưa có trong EduTech (Phương án 1)
+      if (res?.data?.isNewUser) {
+        setGoogleSetup({
+          idToken,
+          email: res.data.email || '',
+          fullName: res.data.fullName || '',
+        });
+        setSuccessMsg(`Tài khoản Google hợp lệ. Vui lòng thiết lập mật khẩu bảo mật để hoàn tất tạo tài khoản.`);
+        return;
+      }
+
+      // Nếu tài khoản đã tồn tại
       const accessToken = res?.data?.accessToken;
       if (!accessToken) {
         setErrorMsg('Máy chủ không cấp token đăng nhập Google.');
@@ -267,13 +290,67 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
         return;
       }
       const targetPortal = landingPortal(profile.roles);
-      setSuccessMsg(`Đăng nhập Google thành công! Xin chào ${profile.fullName}.`);
+      if (tab === 'register') {
+        setSuccessMsg(`Tài khoản Google (${profile.email}) đã tồn tại trên EduTech. Đang tự động đăng nhập cho bạn...`);
+      } else {
+        setSuccessMsg(`Đăng nhập Google thành công! Xin chào ${profile.fullName}.`);
+      }
       setTimeout(() => {
         onClose();
         onSuccess?.(targetPortal);
-      }, 600);
+      }, 700);
     } catch (err: any) {
       setErrorMsg(describeAuthError(err, 'Đăng nhập bằng tài khoản Google không thành công.'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCompleteGoogleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!googleSetup) return;
+
+    if (!googlePassword) {
+      setErrorMsg('Vui lòng nhập mật khẩu cho tài khoản mới.');
+      return;
+    }
+    if (googlePassword.length < 6) {
+      setErrorMsg('Mật khẩu phải chứa ít nhất 6 ký tự.');
+      return;
+    }
+    if (googlePassword !== googleConfirmPassword) {
+      setErrorMsg('Mật khẩu xác nhận không khớp.');
+      return;
+    }
+    if (!googleAcceptTerms) {
+      setErrorMsg('Vui lòng đọc và đánh dấu đồng ý với Điều khoản dịch vụ & Chính sách của EduTech.');
+      return;
+    }
+
+    setLoading(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    try {
+      const res = await authApi.loginWithGoogle(googleSetup.idToken, googlePassword);
+      const accessToken = res?.data?.accessToken;
+      if (!accessToken) {
+        setErrorMsg('Tạo tài khoản thành công nhưng không nhận được phiên làm việc. Vui lòng đăng nhập lại.');
+        setGoogleSetup(null);
+        setTab('login');
+        return;
+      }
+
+      setToken(accessToken);
+      const profile = await fetchCurrentUser();
+      const targetPortal = landingPortal(profile?.roles || ['LEARNER']);
+      setSuccessMsg(`Đăng ký tài khoản Google thành công! Chào mừng ${profile?.fullName || googleSetup.fullName}.`);
+      setTimeout(() => {
+        onClose();
+        onSuccess?.(targetPortal);
+      }, 800);
+    } catch (err: any) {
+      setErrorMsg(describeAuthError(err, 'Không thể hoàn tất đăng ký với tài khoản Google. Vui lòng thử lại.'));
     } finally {
       setLoading(false);
     }
@@ -410,7 +487,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
         </div>
 
         {/* Tab switchers */}
-        {tab === 'forgot' ? (
+        {googleSetup ? (
+          <div className="flex items-center justify-between px-6 py-3 border-b border-slate-200 bg-amber-50/60 text-xs font-bold text-slate-700">
+            <div className="flex items-center gap-2 text-indigo-700">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
+              <span>Hoàn tất đăng ký với Google</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setGoogleSetup(null);
+                setGooglePassword('');
+                setGoogleConfirmPassword('');
+                setErrorMsg(null);
+                setSuccessMsg(null);
+              }}
+              className="flex items-center gap-1 text-slate-500 hover:text-slate-800 transition text-[11px] cursor-pointer"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              Hủy / Đổi tài khoản
+            </button>
+          </div>
+        ) : tab === 'forgot' ? (
           <div className="flex items-center justify-between px-6 py-3 border-b border-slate-200 bg-slate-50 text-xs font-bold text-slate-700">
             <div className="flex items-center gap-2 text-[#e74c3c]">
               <KeyRound className="w-4 h-4" />
@@ -481,7 +579,113 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             </div>
           )}
 
-          {tab === 'login' ? (
+          {googleSetup ? (
+            <form onSubmit={handleCompleteGoogleRegister} className="space-y-3.5 animate-in fade-in">
+              {/* Google account badge card */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-2.5 overflow-hidden">
+                  <div className="w-8 h-8 rounded-full bg-white shadow-xs border border-slate-200 flex items-center justify-center shrink-0">
+                    <svg className="w-4 h-4" viewBox="0 0 24 24">
+                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                    </svg>
+                  </div>
+                  <div className="truncate">
+                    <p className="text-xs font-bold text-slate-800 truncate">{googleSetup.fullName || 'Người dùng Google'}</p>
+                    <p className="text-[11px] text-slate-500 font-mono truncate">{googleSetup.email}</p>
+                  </div>
+                </div>
+                <span className="shrink-0 text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200">
+                  Google Verified
+                </span>
+              </div>
+
+              <div className="p-2.5 bg-blue-50/70 border border-blue-100 rounded-xl text-[11px] text-blue-800 leading-relaxed">
+                Tài khoản Google này chưa đăng ký trên EduTech. Hãy thiết lập mật khẩu bảo mật riêng để hoàn tất tạo tài khoản. Sau này bạn có thể đăng nhập bằng Google hoặc Email + Mật khẩu này.
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Thiết lập mật khẩu</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="password"
+                    value={googlePassword}
+                    onChange={e => setGooglePassword(e.target.value)}
+                    placeholder="Ít nhất 6 ký tự"
+                    required
+                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#e74c3c]/30 focus:border-[#e74c3c]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Xác nhận mật khẩu</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="password"
+                    value={googleConfirmPassword}
+                    onChange={e => setGoogleConfirmPassword(e.target.value)}
+                    placeholder="Nhập lại mật khẩu"
+                    required
+                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#e74c3c]/30 focus:border-[#e74c3c]"
+                  />
+                </div>
+              </div>
+
+              {/* Checkbox điều khoản */}
+              <div className="pt-1">
+                <label className="flex items-start gap-2.5 cursor-pointer text-slate-700 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={googleAcceptTerms}
+                    onChange={e => setGoogleAcceptTerms(e.target.checked)}
+                    className="mt-0.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                  />
+                  <span className="leading-relaxed select-none">
+                    Tôi đã đọc và đồng ý với{' '}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setIsTermsModalOpen(true);
+                      }}
+                      className="text-emerald-700 hover:text-emerald-800 font-bold underline cursor-pointer"
+                    >
+                      Điều khoản dịch vụ & Chính sách của EduTech
+                    </button>
+                  </span>
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading || !googleAcceptTerms}
+                className="w-full mt-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {loading ? 'Đang tạo tài khoản...' : 'Hoàn tất tạo tài khoản & Đăng nhập'}
+                <CheckCircle2 className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setGoogleSetup(null);
+                  setGooglePassword('');
+                  setGoogleConfirmPassword('');
+                  setErrorMsg(null);
+                  setSuccessMsg(null);
+                }}
+                className="w-full py-2 text-slate-500 hover:text-slate-800 text-xs font-semibold cursor-pointer text-center"
+              >
+                Hủy và chọn cách đăng nhập khác
+              </button>
+            </form>
+          ) : tab === 'login' ? (
             <form onSubmit={handleLogin} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Địa chỉ Email</label>

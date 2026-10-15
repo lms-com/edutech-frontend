@@ -41,11 +41,12 @@ export const authApi = {
     return axiosClient.post('/iam-service/api/v1/auth/verify-register-otp', payload);
   },
 
-  loginWithGoogle: async (idToken: string): Promise<ApiResponse<LoginResponse>> => {
-    const deviceFingerPrint = await getDeviceFingerprint();
+  loginWithGoogle: async (idToken: string, password?: string): Promise<ApiResponse<LoginResponse>> => {
+    const deviceFingerPrint = (await getDeviceFingerprint()) || 'browser-device';
     return axiosClient.post('/iam-service/api/v1/auth/google', {
       idToken,
       deviceFingerPrint,
+      ...(password ? { password } : {}),
     });
   },
 

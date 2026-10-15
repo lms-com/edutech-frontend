@@ -774,7 +774,7 @@ export const InstructorCourseManager: React.FC<InstructorCourseManagerProps> = (
                   <div className="p-2 bg-blue-50 text-blue-600 rounded-xl"><DollarSign className="w-4 h-4" /></div>
                 </div>
                 <p className="text-2xl font-black text-blue-700">{formatVND(walletBalance?.pendingBalance ?? 0)}</p>
-                <p className="text-[11px] text-slate-500 mt-1">Doanh thu tạm giữ đối soát</p>
+                <p className="text-[11px] text-slate-500 mt-1">Tự động giải phóng sau 3 ngày</p>
               </div>
 
               <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs relative overflow-hidden">

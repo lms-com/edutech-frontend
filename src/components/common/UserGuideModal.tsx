@@ -116,7 +116,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
                 </p>
                 <div className="p-3 bg-amber-50 rounded-xl border border-amber-200/80 text-[11px] text-amber-900 flex items-start gap-2">
                   <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                  <span><strong>Chính sách bảo vệ 7 ngày:</strong> Nếu khóa học không đúng cam kết, bạn có thể bấm "Lịch sử đơn hàng" ở menu avatar và gửi yêu cầu hoàn tiền trong vòng 7 ngày.</span>
+                  <span><strong>Chính sách bảo vệ 3 ngày:</strong> Nếu khóa học không đúng cam kết, bạn có thể bấm "Lịch sử đơn hàng" ở menu avatar và gửi yêu cầu hoàn tiền trong vòng 3 ngày.</span>
                 </div>
               </div>
 

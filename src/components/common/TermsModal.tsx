@@ -68,9 +68,9 @@ export const TermsModal: React.FC<TermsModalProps> = ({
           </div>
 
           <div className="space-y-2">
-            <h4 className="font-bold text-slate-800 text-sm">4. Chính sách Bảo vệ học viên & Hoàn tiền 7 ngày</h4>
+            <h4 className="font-bold text-slate-800 text-sm">4. Chính sách Bảo vệ học viên & Hoàn tiền 3 ngày</h4>
             <p>
-              EduTech cam kết bảo vệ quyền lợi học tập của học viên. Trong vòng <strong>7 ngày</strong> kể từ thời điểm thanh toán thành công, nếu khóa học không đúng với mô tả, bài giảng bị lỗi nghiêm trọng hoặc giảng viên không hỗ trợ, học viên có quyền gửi yêu cầu hoàn tiền qua hệ thống và nhận lại 100% học phí đã thanh toán.
+              EduTech cam kết bảo vệ quyền lợi học tập của học viên. Trong vòng <strong>3 ngày</strong> kể từ thời điểm thanh toán thành công, nếu khóa học không đúng với mô tả, bài giảng bị lỗi nghiêm trọng hoặc giảng viên không hỗ trợ, học viên có quyền gửi yêu cầu hoàn tiền qua hệ thống và nhận lại 100% học phí đã thanh toán.
             </p>
           </div>
 

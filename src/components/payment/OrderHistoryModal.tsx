@@ -251,7 +251,7 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
                     <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px]">
                       <div className="flex items-center gap-1.5 text-slate-500">
                         <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Bảo vệ hoàn tiền trong 7 ngày</span>
+                        <span>Bảo vệ hoàn tiền trong 3 ngày</span>
                       </div>
                       <button
                         type="button"
@@ -294,7 +294,7 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
 
               <form onSubmit={handleSendDispute} className="p-6 space-y-4">
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1">
-                  <p className="font-bold">Chính sách bảo vệ 7 ngày:</p>
+                  <p className="font-bold">Chính sách bảo vệ 3 ngày:</p>
                   <p className="text-[11px] text-amber-800 leading-relaxed">
                     Đơn hàng trị giá <strong>{formatVND(disputeOrder.totalPrice)}</strong> đang trong thời gian giữ tiền an toàn. Ban Quản Trị sẽ tạm khóa giải ngân cho giảng viên và đối soát trong vòng 24h.
                   </p>

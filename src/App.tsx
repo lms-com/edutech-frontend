@@ -24,7 +24,7 @@ import courseApi from './api/courseApi';
 import notificationApi from './api/notificationApi';
 import { mapCertificate } from './api/mappers/notificationMapper';
 import enrollmentApi, { type EnrollmentDto } from './api/enrollmentApi';
-import { Loader2, AlertCircle, Award } from 'lucide-react';
+import { Loader2, AlertCircle, Award, Bell, X } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export default function App() {
@@ -51,6 +51,7 @@ export default function App() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
+  const [activeNotificationToast, setActiveNotificationToast] = useState<NotificationItem | null>(null);
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   /** Chứng chỉ đang xem trước, chọn từ trang xác thực công khai. */
   const [certificateForPreview, setCertificateForPreview] = useState<Certificate | null>(null);
@@ -289,43 +290,57 @@ export default function App() {
     void loadNotifications();
   }, [loadNotifications, isAuthenticated]);
 
+  // Tự động đóng toast thông báo sau 6 giây
+  useEffect(() => {
+    if (!activeNotificationToast) return;
+    const timer = setTimeout(() => {
+      setActiveNotificationToast(null);
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, [activeNotificationToast]);
+
   /**
    * 3. Luồng SSE realtime.
-   * EventSource không gửi được header Authorization nên backend nhận định danh qua
-   * query param userId — trước đây gửi token nên luôn bị 400 và chuông không cập nhật.
+   * EventSource nhận định danh qua query param userId.
+   * Lắng nghe cả event mặc định lẫn custom event "NEW_NOTIFICATION" từ backend SseEmitterService.
    */
   useEffect(() => {
     if (!currentUser?.id) return;
 
     const eventSource = new EventSource(notificationApi.getSseUrl(currentUser.id));
 
-    eventSource.onmessage = (event) => {
+    const handleNewNotification = (event: MessageEvent) => {
       try {
-        const data = JSON.parse(event.data);
-        // Sự kiện INIT chỉ là mở kết nối, không phải thông báo mới
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        // Sự kiện INIT chỉ là mở kết nối mồi, không phải thông báo mới
         if (!data?.title) return;
-        setNotifications(prev => [
-          {
-            id: data.id ?? `sse_${Date.now()}`,
-            title: data.title,
-            message: data.content ?? '',
-            type: data.type ?? '',
-            timestamp: 'Vừa xong',
-            isRead: false,
-          },
-          ...prev,
-        ]);
+        const newNotif: NotificationItem = {
+          id: data.id ?? `sse_${Date.now()}`,
+          title: data.title,
+          message: data.content ?? data.message ?? '',
+          type: data.type ?? '',
+          timestamp: 'Vừa xong',
+          isRead: false,
+        };
+        setNotifications(prev => [newNotif, ...prev]);
+        setActiveNotificationToast(newNotif);
       } catch {
         // Bỏ qua sự kiện không parse được
       }
     };
+
+    eventSource.onmessage = handleNewNotification;
+    eventSource.addEventListener('NEW_NOTIFICATION', handleNewNotification);
 
     eventSource.onerror = () => {
       // EventSource tự thử kết nối lại; chỉ ghi log để không làm phiền người dùng
       console.warn('Luồng thông báo realtime gián đoạn, đang thử kết nối lại...');
     };
 
-    return () => eventSource.close();
+    return () => {
+      eventSource.removeEventListener('NEW_NOTIFICATION', handleNewNotification);
+      eventSource.close();
+    };
   }, [currentUser?.id]);
 
   // 4. Chứng chỉ của tôi (cần đăng nhập)
@@ -512,8 +527,14 @@ export default function App() {
     onMarkAllAsRead: handleMarkAllAsRead,
     onMarkAsRead: handleMarkAsRead,
     onSelectNotification: (item: NotificationItem) => {
-      if (item.type === 'CERTIFICATE') {
+      if (item.type === 'CERTIFICATE' || item.type === 'COURSE_COMPLETED') {
         handleOpenCertificate();
+      } else if (item.type === 'ORDER_COMPLETED') {
+        setShowOrderHistoryModal(true);
+      } else if (item.type === 'COURSE_APPROVED' || item.type === 'COURSE_REJECTED' || item.type === 'PAYOUT_APPROVED' || item.type === 'PAYOUT_REJECTED') {
+        if (canAccessPortal(currentUser?.roles || [], 'instructor')) {
+          handleSelectPortal('instructor');
+        }
       }
     },
     onOpenAuthModal: () => setIsAuthModalOpen(true),
@@ -684,6 +705,46 @@ export default function App() {
           openCourseDetail(courseId);
         }}
       />
+
+      {/* Floating Real-time Notification Toast Alert */}
+      {activeNotificationToast && (
+        <div className="fixed top-20 right-5 z-60 max-w-sm w-full bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200/90 p-4 animate-in slide-in-from-right duration-300">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+              <Bell className="w-4 h-4 text-[#e74c3c]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Thông báo mới</span>
+                <button
+                  type="button"
+                  onClick={() => setActiveNotificationToast(null)}
+                  className="text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <h4 className="text-xs font-bold text-slate-900 mt-0.5 line-clamp-1">{activeNotificationToast.title}</h4>
+              <p className="text-[11px] text-slate-600 mt-1 line-clamp-2 leading-relaxed">
+                {activeNotificationToast.message}
+              </p>
+              <div className="mt-2.5 flex items-center justify-between pt-2 border-t border-slate-100">
+                <span className="text-[10px] text-slate-400">Vừa xong</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    sharedHeaderProps.onSelectNotification(activeNotificationToast);
+                    setActiveNotificationToast(null);
+                  }}
+                  className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                >
+                  Xem chi tiết →
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -210,9 +210,34 @@ export interface OrderSummary {
   id: string;
   totalPrice: number;
   currencyCode: string;
-  status: 'PENDING' | 'CANCELLED' | 'PAID' | 'DELETED';
+  status: 'PENDING' | 'CANCELLED' | 'PAID' | 'REFUND_REQUESTED' | 'REFUNDED' | 'DELETED';
   createdAt: string;
+  rawCreatedAt?: string;
   items: OrderItem[];
+}
+
+export interface RefundRequestItem {
+  courseId: string;
+  courseName: string;
+  instructorId: string;
+  finalPrice: number;
+}
+
+export interface RefundRequest {
+  id: string;
+  orderId: string;
+  learnerId: string;
+  amount: number;
+  currencyCode: string;
+  reason: string;
+  detail?: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  adminNote?: string;
+  resolvedBy?: string;
+  resolvedAt?: string;
+  createdAt: string;
+  orderCreatedAt?: string;
+  items?: RefundRequestItem[];
 }
 
 export interface InstructorAnalyticsOverview {

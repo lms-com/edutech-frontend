@@ -69,17 +69,37 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
     }
   };
 
+  const isWithin3Days = (rawDate?: string) => {
+    if (!rawDate) return true;
+    try {
+      const created = new Date(rawDate).getTime();
+      const now = Date.now();
+      const diffDays = (now - created) / (1000 * 60 * 60 * 24);
+      return diffDays <= 3;
+    } catch {
+      return true;
+    }
+  };
+
   const handleSendDispute = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!disputeOrder || !disputeDetail.trim()) return;
 
     setDisputeSubmitting(true);
-    // Lưu mô phỏng vào local hoặc notification
-    await new Promise(res => setTimeout(res, 800));
-    setDisputeSubmitting(false);
-    setDisputeSuccessMsg(`Yêu cầu khiếu nại cho đơn hàng #${disputeOrder.id.slice(0, 8).toUpperCase()} đã được gửi đến Ban Quản Trị.`);
-    setDisputeOrder(null);
-    setDisputeDetail('');
+    try {
+      await orderApi.requestRefund(disputeOrder.id, {
+        reason: disputeReason,
+        detail: disputeDetail.trim(),
+      });
+      setDisputeSuccessMsg(`Yêu cầu khiếu nại hoàn tiền cho đơn hàng #${disputeOrder.id.slice(0, 8).toUpperCase()} đã được gửi đến Ban Quản Trị thẩm định theo chính sách 3 ngày.`);
+      setDisputeOrder(null);
+      setDisputeDetail('');
+      loadOrders(currentPage);
+    } catch (err: any) {
+      alert(err?.message || 'Không thể gửi yêu cầu khiếu nại hoàn tiền.');
+    } finally {
+      setDisputeSubmitting(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -90,6 +110,18 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
             <CheckCircle2 className="w-3.5 h-3.5" /> Đã thanh toán
+          </span>
+        );
+      case 'REFUND_REQUESTED':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
+            <Clock className="w-3.5 h-3.5" /> Đang khiếu nại hoàn tiền
+          </span>
+        );
+      case 'REFUNDED':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800">
+            <CheckCircle2 className="w-3.5 h-3.5" /> Đã hoàn tiền (3 ngày)
           </span>
         );
       case 'PENDING':
@@ -253,14 +285,39 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
                         <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                         <span>Bảo vệ hoàn tiền trong 3 ngày</span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setDisputeOrder(order)}
-                        className="text-amber-700 hover:text-amber-800 font-bold hover:underline flex items-center gap-1 cursor-pointer"
-                      >
-                        <HelpCircle className="w-3 h-3" />
-                        Khiếu nại / Yêu cầu hoàn tiền
-                      </button>
+                      {isWithin3Days(order.rawCreatedAt) ? (
+                        <button
+                          type="button"
+                          onClick={() => setDisputeOrder(order)}
+                          className="text-amber-700 hover:text-amber-800 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          <HelpCircle className="w-3 h-3" />
+                          Khiếu nại / Yêu cầu hoàn tiền (3 ngày)
+                        </button>
+                      ) : (
+                        <span className="text-slate-400 italic flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          Hết hạn hoàn tiền (sau 3 ngày)
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {order.status === 'REFUND_REQUESTED' && (
+                    <div className="flex items-center justify-between pt-2 border-t border-amber-200 text-[11px] text-amber-700 font-semibold bg-amber-50/70 -mx-4 -mb-4 px-4 py-2.5 rounded-b-2xl">
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-amber-600 animate-spin" />
+                        <span>Yêu cầu khiếu nại đang được Ban Quản Trị đối soát và thẩm định theo chính sách 3 ngày.</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {order.status === 'REFUNDED' && (
+                    <div className="flex items-center justify-between pt-2 border-t border-purple-200 text-[11px] text-purple-700 font-semibold bg-purple-50/70 -mx-4 -mb-4 px-4 py-2.5 rounded-b-2xl">
+                      <div className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-purple-600" />
+                        <span>Đơn hàng đã được duyệt hoàn tiền. Quyền truy cập khóa học đã được thu hồi.</span>
+                      </div>
                     </div>
                   )}
                 </div>

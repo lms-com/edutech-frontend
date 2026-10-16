@@ -1,8 +1,9 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { PaymentWaitingModal } from '../payment/PaymentWaitingModal';
 import type { Course, ReviewItem } from '../../types';
 import orderApi from '../../api/orderApi';
 import enrollmentApi from '../../api/enrollmentApi';
+import promotionApi, { type PromotionValidateResult } from '../../api/promotionApi';
 import { CourseThumbnail } from '../common/CourseThumbnail';
 import courseApi from '../../api/courseApi';
 import { formatVND, formatDuration } from '../../utils/format';
@@ -20,6 +21,8 @@ import {
   ArrowLeft,
   Loader2,
   AlertCircle,
+  Tag,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface CourseDetailProps {
@@ -44,6 +47,10 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [isEnrollingFree, setIsEnrollingFree] = useState(false);
+
+  // Trạng thái validate mã giảm giá
+  const [promoValidating, setPromoValidating] = useState(false);
+  const [promoResult, setPromoResult] = useState<PromotionValidateResult | null>(null);
 
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [ratingSummary, setRatingSummary] = useState<{
@@ -212,6 +219,29 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
       }
     };
   }, [isWaitingPaymentOpen, course.id]);
+
+  // Kiểm tra mã giảm giá ngay trên UI trước khi đặt hàng
+  const handleApplyPromo = useCallback(async () => {
+    if (!promoCode.trim()) return;
+    if (!course.price || course.price <= 0) {
+      setPromoResult({ valid: false, code: promoCode, message: 'Khóa học miễn phí không cần mã giảm giá.' });
+      return;
+    }
+    setPromoValidating(true);
+    setPromoResult(null);
+    try {
+      const result = await promotionApi.validateCode(
+        promoCode.trim().toUpperCase(),
+        course.id,
+        course.price,
+      );
+      setPromoResult(result);
+    } catch (err: any) {
+      setPromoResult({ valid: false, code: promoCode, message: err?.message || 'Không thể kiểm tra mã giảm giá.' });
+    } finally {
+      setPromoValidating(false);
+    }
+  }, [promoCode, course.id, course.price]);
 
   const handleCheckoutVNPay = async () => {
     setIsCheckingOut(true);
@@ -550,23 +580,79 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
 
             <div className="p-6 space-y-5">
               <div className="space-y-1">
-                <span className="text-2xl font-black text-[#e74c3c]">
-                  {course.price > 0 ? formatVND(course.price) : 'Miễn phí'}
-                </span>
+                {promoResult?.valid && promoResult.finalPrice !== undefined && promoResult.finalPrice !== null ? (
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl font-black text-[#e74c3c]">
+                        {formatVND(promoResult.finalPrice)}
+                      </span>
+                      <span className="text-sm font-semibold text-slate-400 line-through">
+                        {formatVND(course.price)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-emerald-600 font-bold flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Tiết kiệm {formatVND(promoResult.discountAmount || (course.price - promoResult.finalPrice))}
+                    </p>
+                  </div>
+                ) : (
+                  <span className="text-2xl font-black text-[#e74c3c]">
+                    {course.price > 0 ? formatVND(course.price) : 'Miễn phí'}
+                  </span>
+                )}
                 <p className="text-xs text-slate-500">
                   {isEnrolled ? 'Bạn đã có quyền học khóa này.' : course.price > 0 ? 'Thanh toán một lần, truy cập trọn đời' : 'Ghi danh miễn phí để bắt đầu học.'}
                 </p>
               </div>
 
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Nhập mã giảm giá..."
-                  value={promoCode}
-                  onChange={(e) => setPromoCode(e.target.value)}
-                  className="flex-1 px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-[#e74c3c]"
-                />
-              </div>
+              {!isEnrolled && course.price > 0 && (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Tag className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Nhập mã voucher (VD: TECH20)..."
+                        value={promoCode}
+                        onChange={(e) => {
+                          setPromoCode(e.target.value.toUpperCase());
+                          if (promoResult) setPromoResult(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            void handleApplyPromo();
+                          }
+                        }}
+                        className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-xl uppercase font-mono tracking-wider focus:outline-none focus:border-[#e74c3c]"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      disabled={promoValidating || !promoCode.trim()}
+                      onClick={() => void handleApplyPromo()}
+                      className="px-3.5 py-2 text-xs font-bold rounded-xl bg-[#2c3e50] hover:bg-[#1a252f] text-white transition disabled:opacity-50 cursor-pointer flex items-center gap-1 shrink-0"
+                    >
+                      {promoValidating ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Áp dụng'}
+                    </button>
+                  </div>
+
+                  {promoResult && (
+                    <div className={`p-2.5 rounded-xl text-xs flex items-start gap-1.5 ${
+                      promoResult.valid 
+                        ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' 
+                        : 'bg-rose-50 border border-rose-200 text-rose-700'
+                    }`}>
+                      {promoResult.valid ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                      )}
+                      <span className="leading-relaxed">{promoResult.message}</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {checkoutError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-[11px] text-rose-700 flex items-start gap-2">

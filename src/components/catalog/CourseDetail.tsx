@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { PaymentWaitingModal } from '../payment/PaymentWaitingModal';
 import type { Course, ReviewItem } from '../../types';
 import orderApi from '../../api/orderApi';
 import enrollmentApi from '../../api/enrollmentApi';
+import promotionApi, { type PromotionValidateResult } from '../../api/promotionApi';
 import { CourseThumbnail } from '../common/CourseThumbnail';
 import courseApi from '../../api/courseApi';
 import { formatVND, formatDuration } from '../../utils/format';
@@ -19,6 +21,8 @@ import {
   ArrowLeft,
   Loader2,
   AlertCircle,
+  Tag,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface CourseDetailProps {
@@ -44,7 +48,16 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [isEnrollingFree, setIsEnrollingFree] = useState(false);
 
+  // Trạng thái validate mã giảm giá
+  const [promoValidating, setPromoValidating] = useState(false);
+  const [promoResult, setPromoResult] = useState<PromotionValidateResult | null>(null);
+
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
+  const [ratingSummary, setRatingSummary] = useState<{
+    averageRating: number;
+    totalReviews: number;
+    starDistribution: Record<number, number>;
+  } | null>(null);
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
   const [relatedCourses, setRelatedCourses] = useState<Course[]>([]);
@@ -53,11 +66,27 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewSubmitError, setReviewSubmitError] = useState<string | null>(null);
 
-  // Điểm đánh giá không có trong API khóa học nên tính từ danh sách đánh giá thật
-  const reviewsCount = reviews.length;
-  const rating = reviewsCount > 0
-    ? Math.round((reviews.reduce((sum, review) => sum + review.rating, 0) / reviewsCount) * 10) / 10
+  // Trạng thái mở tab thanh toán VNPay và chờ xác nhận quyền học
+  const [isWaitingPaymentOpen, setIsWaitingPaymentOpen] = useState(false);
+  const [waitingPaymentUrl, setWaitingPaymentUrl] = useState('');
+  const [isCheckingEnrollment, setIsCheckingEnrollment] = useState(false);
+  const pollingRef = useRef<number | null>(null);
+
+  // Ưu tiên lấy thống kê từ endpoint summary; nếu chưa có thì tính từ danh sách đánh giá
+  const reviewsCount = ratingSummary ? ratingSummary.totalReviews : reviews.length;
+  const rating = ratingSummary
+    ? ratingSummary.averageRating
+    : reviews.length > 0
+    ? Math.round((reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length) * 10) / 10
     : 0;
+
+  const starCounts: Record<number, number> = ratingSummary?.starDistribution ?? {
+    5: reviews.filter(r => r.rating === 5).length,
+    4: reviews.filter(r => r.rating === 4).length,
+    3: reviews.filter(r => r.rating === 3).length,
+    2: reviews.filter(r => r.rating === 2).length,
+    1: reviews.filter(r => r.rating === 1).length,
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -65,8 +94,14 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
       setReviewsLoading(true);
       setReviewsError(null);
       try {
-        const page = await enrollmentApi.getCourseReviews(course.id);
-        if (!cancelled) setReviews(page.items);
+        const [page, summary] = await Promise.all([
+          enrollmentApi.getCourseReviews(course.id),
+          enrollmentApi.getCourseRatingSummary(course.id).catch(() => null),
+        ]);
+        if (!cancelled) {
+          setReviews(page.items);
+          setRatingSummary(summary);
+        }
       } catch (err: any) {
         if (!cancelled) setReviewsError(err?.message || 'Không tải được đánh giá của khóa học.');
       } finally {
@@ -97,6 +132,9 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
       });
       setReviews(current => [review, ...current.filter(item => item.id !== review.id)]);
       setReviewComment('');
+      enrollmentApi.getCourseRatingSummary(course.id)
+        .then(summary => setRatingSummary(summary))
+        .catch(() => null);
     } catch (err: any) {
       setReviewSubmitError(err?.status === 403
         ? 'Bạn cần có quyền học đang hoạt động để gửi đánh giá.'
@@ -105,6 +143,105 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
       setReviewSubmitting(false);
     }
   };
+
+  const checkEnrollmentStatus = async (showErrorToast = false): Promise<boolean> => {
+    setIsCheckingEnrollment(true);
+    try {
+      const enrollment = await enrollmentApi.findMyEnrollmentForCourse(course.id);
+      if (enrollment && enrollment.status?.toUpperCase() === 'ACTIVE') {
+        setIsWaitingPaymentOpen(false);
+        if (pollingRef.current) {
+          window.clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
+        onStartLearning(course);
+        return true;
+      }
+      if (showErrorToast) {
+        setCheckoutError('Hệ thống chưa nhận được thông tin kích hoạt. Nếu bạn vừa thanh toán, vui lòng chờ trong giây lát rồi bấm lại.');
+      }
+      return false;
+    } catch (err: any) {
+      if (showErrorToast) {
+        setCheckoutError(err?.message || 'Không thể kiểm tra trạng thái khóa học.');
+      }
+      return false;
+    } finally {
+      setIsCheckingEnrollment(false);
+    }
+  };
+
+  // Lắng nghe tín hiệu từ tab con VNPay gửi về qua BroadcastChannel và postMessage
+  useEffect(() => {
+    if (!isWaitingPaymentOpen) {
+      if (pollingRef.current) {
+        window.clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+      return;
+    }
+
+    const handleMessageEvent = (event: MessageEvent) => {
+      if (event.data?.type === 'VNPAY_PAYMENT_COMPLETED') {
+        void checkEnrollmentStatus();
+      }
+    };
+
+    window.addEventListener('message', handleMessageEvent);
+
+    let bc: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        bc = new BroadcastChannel('edutech_payment');
+        bc.onmessage = (event) => {
+          if (event.data?.type === 'VNPAY_PAYMENT_COMPLETED') {
+            void checkEnrollmentStatus();
+          }
+        };
+      } catch (err) {
+        console.warn('Không thể khởi tạo BroadcastChannel:', err);
+      }
+    }
+
+    // Polling tự động mỗi 3 giây trong khi modal chờ đang mở
+    pollingRef.current = window.setInterval(() => {
+      void checkEnrollmentStatus();
+    }, 3000);
+
+    return () => {
+      window.removeEventListener('message', handleMessageEvent);
+      if (bc) {
+        bc.close();
+      }
+      if (pollingRef.current) {
+        window.clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [isWaitingPaymentOpen, course.id]);
+
+  // Kiểm tra mã giảm giá ngay trên UI trước khi đặt hàng
+  const handleApplyPromo = useCallback(async () => {
+    if (!promoCode.trim()) return;
+    if (!course.price || course.price <= 0) {
+      setPromoResult({ valid: false, code: promoCode, message: 'Khóa học miễn phí không cần mã giảm giá.' });
+      return;
+    }
+    setPromoValidating(true);
+    setPromoResult(null);
+    try {
+      const result = await promotionApi.validateCode(
+        promoCode.trim().toUpperCase(),
+        course.id,
+        course.price,
+      );
+      setPromoResult(result);
+    } catch (err: any) {
+      setPromoResult({ valid: false, code: promoCode, message: err?.message || 'Không thể kiểm tra mã giảm giá.' });
+    } finally {
+      setPromoValidating(false);
+    }
+  }, [promoCode, course.id, course.price]);
 
   const handleCheckoutVNPay = async () => {
     setIsCheckingOut(true);
@@ -124,10 +261,13 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
         setCheckoutError('Máy chủ không trả về đường dẫn thanh toán.');
         return;
       }
-      // Nhớ lại khóa học vì bước chuyển sang VNPay sẽ nạp lại toàn bộ trang
+      // Nhớ lại khóa học để hỗ trợ khôi phục dự phòng nếu cần
       rememberPendingPurchase(course.id);
-      // Chuyển sang cổng VNPay sandbox để thanh toán thật
-      window.location.href = response.paymentUrl;
+      setWaitingPaymentUrl(response.paymentUrl);
+      setIsWaitingPaymentOpen(true);
+
+      // Mở cổng VNPay ở Tab mới (Phương án 1) - Giữ tab hiện tại không bị ảnh hưởng URL history
+      window.open(response.paymentUrl, '_blank', 'noopener,noreferrer');
     } catch (err: any) {
       setCheckoutError(err?.message || 'Không tạo được đơn hàng. Kiểm tra bạn đã đăng nhập chưa.');
     } finally {
@@ -302,7 +442,7 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
           )}
 
           {/* Reviews List */}
-          <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-5">
             <div>
               <h2 className="text-lg font-bold text-[#2c3e50]">Đánh giá từ học viên</h2>
               {reviewsCount > 0 && (
@@ -312,7 +452,47 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
               )}
             </div>
 
-            {isEnrolled && (
+            {reviewsCount > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 p-4 rounded-xl bg-slate-50 border border-slate-200 items-center">
+                <div className="text-center sm:border-r sm:border-slate-200 sm:pr-4 space-y-1">
+                  <div className="text-4xl font-black text-[#2c3e50]">{rating.toFixed(1)}</div>
+                  <div className="flex items-center justify-center gap-0.5 text-amber-400">
+                    {[1, 2, 3, 4, 5].map(star => (
+                      <Star
+                        key={star}
+                        className={`w-4 h-4 ${star <= Math.round(rating) ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-[11px] font-medium text-slate-500">{reviewsCount} lượt đánh giá</p>
+                </div>
+
+                <div className="sm:col-span-2 space-y-2">
+                  {[5, 4, 3, 2, 1].map(star => {
+                    const count = starCounts[star] ?? 0;
+                    const percent = reviewsCount > 0 ? Math.round((count / reviewsCount) * 100) : 0;
+                    return (
+                      <div key={star} className="flex items-center gap-2.5 text-xs">
+                        <span className="w-11 font-semibold text-slate-700 flex items-center gap-1 shrink-0">
+                          {star} <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                        </span>
+                        <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-amber-400 rounded-full transition-all duration-300"
+                            style={{ width: `${percent}%` }}
+                          />
+                        </div>
+                        <span className="w-14 text-right text-[11px] text-slate-500 shrink-0">
+                          {count} ({percent}%)
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {isEnrolled ? (
               <form onSubmit={handleSubmitReview} className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
                 <div>
                   <p className="text-xs font-bold text-slate-700">Đánh giá khóa học</p>
@@ -333,6 +513,10 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                   {reviewSubmitting ? 'Đang gửi...' : 'Gửi đánh giá'}
                 </button>
               </form>
+            ) : (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+                Chỉ học viên đã ghi danh và kích hoạt khóa học mới có thể gửi đánh giá và nhận xét.
+              </div>
             )}
 
             {reviewsLoading && (
@@ -396,23 +580,79 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
 
             <div className="p-6 space-y-5">
               <div className="space-y-1">
-                <span className="text-2xl font-black text-[#e74c3c]">
-                  {course.price > 0 ? formatVND(course.price) : 'Miễn phí'}
-                </span>
+                {promoResult?.valid && promoResult.finalPrice !== undefined && promoResult.finalPrice !== null ? (
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl font-black text-[#e74c3c]">
+                        {formatVND(promoResult.finalPrice)}
+                      </span>
+                      <span className="text-sm font-semibold text-slate-400 line-through">
+                        {formatVND(course.price)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-emerald-600 font-bold flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Tiết kiệm {formatVND(promoResult.discountAmount || (course.price - promoResult.finalPrice))}
+                    </p>
+                  </div>
+                ) : (
+                  <span className="text-2xl font-black text-[#e74c3c]">
+                    {course.price > 0 ? formatVND(course.price) : 'Miễn phí'}
+                  </span>
+                )}
                 <p className="text-xs text-slate-500">
                   {isEnrolled ? 'Bạn đã có quyền học khóa này.' : course.price > 0 ? 'Thanh toán một lần, truy cập trọn đời' : 'Ghi danh miễn phí để bắt đầu học.'}
                 </p>
               </div>
 
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Nhập mã giảm giá..."
-                  value={promoCode}
-                  onChange={(e) => setPromoCode(e.target.value)}
-                  className="flex-1 px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-[#e74c3c]"
-                />
-              </div>
+              {!isEnrolled && course.price > 0 && (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Tag className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Nhập mã voucher (VD: TECH20)..."
+                        value={promoCode}
+                        onChange={(e) => {
+                          setPromoCode(e.target.value.toUpperCase());
+                          if (promoResult) setPromoResult(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            void handleApplyPromo();
+                          }
+                        }}
+                        className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-xl uppercase font-mono tracking-wider focus:outline-none focus:border-[#e74c3c]"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      disabled={promoValidating || !promoCode.trim()}
+                      onClick={() => void handleApplyPromo()}
+                      className="px-3.5 py-2 text-xs font-bold rounded-xl bg-[#2c3e50] hover:bg-[#1a252f] text-white transition disabled:opacity-50 cursor-pointer flex items-center gap-1 shrink-0"
+                    >
+                      {promoValidating ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Áp dụng'}
+                    </button>
+                  </div>
+
+                  {promoResult && (
+                    <div className={`p-2.5 rounded-xl text-xs flex items-start gap-1.5 ${
+                      promoResult.valid 
+                        ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' 
+                        : 'bg-rose-50 border border-rose-200 text-rose-700'
+                    }`}>
+                      {promoResult.valid ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                      )}
+                      <span className="leading-relaxed">{promoResult.message}</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {checkoutError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-[11px] text-rose-700 flex items-start gap-2">
@@ -456,6 +696,17 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                 )}
               </div>
 
+              {/* Cam kết bảo vệ học viên trong 3 ngày */}
+              <div className="p-3.5 bg-gradient-to-r from-emerald-50 to-teal-50/60 border border-emerald-200/80 rounded-2xl space-y-1.5 shadow-2xs">
+                <div className="flex items-center gap-2 text-emerald-800 font-bold text-xs">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Bảo vệ học viên & Hoàn tiền 3 ngày</span>
+                </div>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  Đảm bảo hoàn tiền 100% trong vòng 3 ngày nếu nội dung không đúng cam kết hoặc giảng viên không hỗ trợ. Yên tâm trải nghiệm học tập an toàn.
+                </p>
+              </div>
+
               <div className="space-y-2.5 pt-3 border-t border-slate-100 text-xs text-slate-600 font-medium">
                 {course.totalLessons > 0 && (
                   <div className="flex items-center gap-2.5">
@@ -482,6 +733,16 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Modal chờ thanh toán VNPay khi mở tab mới */}
+      <PaymentWaitingModal
+        isOpen={isWaitingPaymentOpen}
+        onClose={() => setIsWaitingPaymentOpen(false)}
+        course={course}
+        paymentUrl={waitingPaymentUrl}
+        onCheckStatus={() => void checkEnrollmentStatus(true)}
+        checking={isCheckingEnrollment}
+      />
     </div>
   );
 };

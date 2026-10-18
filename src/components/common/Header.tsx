@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { PortalType, NotificationItem } from '../../types';
 import { NotificationPopover } from './NotificationPopover';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -13,8 +13,17 @@ import {
   LogOut,
   Laptop,
   BookOpen,
-  ChevronDown
+  ChevronDown,
+  ShoppingBag,
+  KeyRound,
+  Lock,
+  ShieldCheck,
+  HelpCircle,
+  Sparkles,
 } from 'lucide-react';
+import { UserSecuritySettingsModal } from '../security/UserSecuritySettingsModal';
+import { UserGuideModal } from './UserGuideModal';
+import { ApplyInstructorModal } from '../instructor/ApplyInstructorModal';
 
 interface HeaderProps {
   currentPortal: PortalType;
@@ -22,6 +31,7 @@ interface HeaderProps {
   onOpenLearningRoom: () => void;
   onOpenCertificate: () => void;
   onOpenPublicVerify: () => void;
+  onOpenOrderHistory?: () => void;
   notifications: NotificationItem[];
   onMarkAllAsRead: () => void;
   onMarkAsRead?: (notificationId: string) => void;
@@ -33,6 +43,7 @@ export const Header: React.FC<HeaderProps> = ({
   currentPortal,
   onSelectPortal,
   onOpenPublicVerify,
+  onOpenOrderHistory,
   notifications,
   onMarkAllAsRead,
   onMarkAsRead,
@@ -42,6 +53,11 @@ export const Header: React.FC<HeaderProps> = ({
   const { user, isAuthenticated, logout } = useAuthStore();
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [fingerprint, setFingerprint] = useState<string>('');
+  const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
+  const [securityInitialTab, setSecurityInitialTab] = useState<'pin' | 'password'>('password');
+  const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
+  const [isApplyInstructorOpen, setIsApplyInstructorOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Chỉ hiện lối vào những portal mà vai trò hiện tại được phép dùng
   const showInstructorPortal = canAccessPortal(user?.roles, 'instructor');
@@ -54,9 +70,26 @@ export const Header: React.FC<HeaderProps> = ({
     getDeviceFingerprint().then(fp => setFingerprint(fp));
   }, []);
 
+  // Đóng dropdown khi click ra ngoài
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setProfileDropdownOpen(false);
+      }
+    };
+    if (profileDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [profileDropdownOpen]);
+
   const handleLogout = async () => {
     setProfileDropdownOpen(false);
     await logout();
+    onSelectPortal('learner');
+    window.location.reload();
   };
 
   return (
@@ -132,6 +165,16 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right: Quick Action CTAs & Profile */}
         <div className="flex items-center gap-2 md:gap-3 shrink-0">
+          {/* Nút Hướng dẫn sử dụng toàn diện */}
+          <button
+            onClick={() => setIsGuideModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-[#2c3e50] hover:bg-slate-100 rounded-xl transition-all cursor-pointer border border-slate-200/60 shadow-2xs"
+            title="Xem hướng dẫn sử dụng chi tiết dành cho học viên và giảng viên"
+          >
+            <HelpCircle className="w-4 h-4 text-indigo-600" />
+            <span>Hướng dẫn</span>
+          </button>
+
           {/* Quick Certificate Verify Link */}
           {showPublicCertificateLookup && <button
             onClick={onOpenPublicVerify}
@@ -152,7 +195,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* User Profile avatar or Login CTA */}
           {isAuthenticated && user ? (
-            <div className="relative pl-2 border-l border-slate-200">
+            <div ref={dropdownRef} className="relative pl-2 border-l border-slate-200 user-profile-menu-container">
               <button
                 onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
                 className="flex items-center gap-2 p-1.5 pr-2.5 rounded-xl hover:bg-slate-100 transition cursor-pointer text-left border border-transparent hover:border-slate-200"
@@ -173,17 +216,33 @@ export const Header: React.FC<HeaderProps> = ({
 
               {/* Profile Dropdown */}
               {profileDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                  <div className="px-4 py-2.5 border-b border-slate-100">
-                    <p className="text-xs font-bold text-[#2c3e50] truncate">{user.fullName}</p>
-                    <p className="text-[11px] text-slate-400 truncate">{user.email}</p>
-                    <div className="mt-2 flex items-center gap-1 text-[10px] font-mono text-slate-500 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
-                      <Laptop className="w-3 h-3 text-blue-500 shrink-0" />
-                      <span className="truncate">Thiết bị: {fingerprint.substring(0, 16) || 'Đang bảo mật'}...</span>
+                <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                  {/* User info banner */}
+                  <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-[#2c3e50] text-white font-bold flex items-center justify-center text-sm shadow-sm shrink-0">
+                        {user.fullName ? user.fullName.charAt(0).toUpperCase() : 'U'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-slate-800 truncate">{user.fullName}</p>
+                        <p className="text-[11px] text-slate-400 truncate">{user.email}</p>
+                      </div>
+                    </div>
+                    <div className="mt-2.5 flex items-center justify-between gap-1 text-[10px]">
+                      <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold border border-indigo-200">
+                        {primaryRoleLabel(user.roles)}
+                      </span>
+                      <span className="font-mono text-slate-400 truncate max-w-[130px]">
+                        {fingerprint ? `Thiết bị: ${fingerprint.substring(0, 10)}...` : 'Bảo mật'}
+                      </span>
                     </div>
                   </div>
 
+                  {/* Section 1: Workspaces */}
                   <div className="py-1 border-b border-slate-100 text-xs font-medium">
+                    <div className="px-4 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Không gian làm việc
+                    </div>
                     <button
                       onClick={() => { setProfileDropdownOpen(false); onSelectPortal('learner'); }}
                       className="w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition cursor-pointer"
@@ -191,13 +250,30 @@ export const Header: React.FC<HeaderProps> = ({
                       <BookOpen className="w-4 h-4 text-[#e74c3c]" />
                       Trang Học viên
                     </button>
-                    {showInstructorPortal && (
+                    {onOpenOrderHistory && (
+                      <button
+                        onClick={() => { setProfileDropdownOpen(false); onOpenOrderHistory(); }}
+                        className="w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition cursor-pointer"
+                      >
+                        <ShoppingBag className="w-4 h-4 text-amber-500" />
+                        Lịch sử đơn hàng
+                      </button>
+                    )}
+                    {showInstructorPortal ? (
                       <button
                         onClick={() => { setProfileDropdownOpen(false); onSelectPortal('instructor'); }}
                         className="w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition cursor-pointer"
                       >
                         <Video className="w-4 h-4 text-indigo-600" />
                         Studio Giảng viên
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => { setProfileDropdownOpen(false); setIsApplyInstructorOpen(true); }}
+                        className="w-full px-4 py-2 text-left text-indigo-700 hover:bg-indigo-50/70 flex items-center gap-2.5 transition cursor-pointer font-bold"
+                      >
+                        <Sparkles className="w-4 h-4 text-indigo-600" />
+                        Đăng ký làm Giảng viên
                       </button>
                     )}
                     {showAdminPortal && (
@@ -211,6 +287,42 @@ export const Header: React.FC<HeaderProps> = ({
                     )}
                   </div>
 
+                  {/* Section 2: Security & Password Settings */}
+                  <div className="py-1 border-b border-slate-100 text-xs font-medium">
+                    <div className="px-4 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Bảo mật & Cài đặt
+                    </div>
+                    <button
+                      onClick={() => {
+                        setProfileDropdownOpen(false);
+                        setSecurityInitialTab('password');
+                        setIsSecurityModalOpen(true);
+                      }}
+                      className="w-full px-4 py-2 text-left text-slate-700 hover:bg-emerald-50/70 hover:text-emerald-800 flex items-center gap-2.5 transition cursor-pointer group"
+                    >
+                      <Lock className="w-4 h-4 text-emerald-600 group-hover:scale-105 transition-transform" />
+                      <div className="flex-1">
+                        <span className="font-semibold block">Đổi mật khẩu (Email OTP)</span>
+                        <span className="text-[10px] text-slate-400 font-normal">Xác thực OTP qua email an toàn</span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setProfileDropdownOpen(false);
+                        setSecurityInitialTab('pin');
+                        setIsSecurityModalOpen(true);
+                      }}
+                      className="w-full px-4 py-2 text-left text-slate-700 hover:bg-amber-50/70 hover:text-amber-800 flex items-center gap-2.5 transition cursor-pointer group"
+                    >
+                      <KeyRound className="w-4 h-4 text-amber-600 group-hover:scale-105 transition-transform" />
+                      <div className="flex-1">
+                        <span className="font-semibold block">Mã PIN bảo mật ví (Cấp 2)</span>
+                        <span className="text-[10px] text-slate-400 font-normal">Khóa ví & xác thực rút tiền</span>
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* Section 3: Logout */}
                   <div className="py-1">
                     <button
                       onClick={handleLogout}
@@ -283,6 +395,29 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
         )}
       </div>
+
+      {/* Global Security Settings Modal (Password & PIN) */}
+      <UserSecuritySettingsModal
+        isOpen={isSecurityModalOpen}
+        initialTab={securityInitialTab}
+        onClose={() => setIsSecurityModalOpen(false)}
+      />
+
+      {/* Global User Guide Modal */}
+      <UserGuideModal
+        isOpen={isGuideModalOpen}
+        onClose={() => setIsGuideModalOpen(false)}
+        defaultRole={canAccessPortal(user?.roles, 'instructor') ? 'instructor' : 'learner'}
+      />
+
+      {/* Modal nộp đơn làm giảng viên */}
+      <ApplyInstructorModal
+        isOpen={isApplyInstructorOpen}
+        onClose={() => setIsApplyInstructorOpen(false)}
+        onSuccess={() => {
+          // Callback sau khi nộp thành công
+        }}
+      />
     </header>
   );
 };

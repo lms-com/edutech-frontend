@@ -13,12 +13,18 @@ export const mediaApi = {
   },
 
   // 2. Yêu cầu cấp Presigned URL để upload video trực tiếp lên MinIO storage
-  getPresignedUploadUrl: async (originalFileName: string, contentType: string): Promise<PresignedUrlResponse> => {
-    const res: any = await axiosClient.post('/media-service/api/v1/media/presigned-url', {
+  getPresignedUploadUrl: async (originalFileName: string, contentType: string, fileSize?: number): Promise<PresignedUrlResponse> => {
+    const res: any = await axiosClient.post('/media-service/api/v1/media/upload-url', {
       originalFileName,
       contentType,
+      fileSize: fileSize || 0,
     });
     return res?.data || res;
+  },
+
+  // 2.1. Xác nhận đã upload xong lên MinIO
+  confirmUpload: async (mediaId: string): Promise<void> => {
+    await axiosClient.post(`/media-service/api/v1/media/${mediaId}/confirm`);
   },
 
   // 3. Upload file trực tiếp lên MinIO bằng Presigned URL

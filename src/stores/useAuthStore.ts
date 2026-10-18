@@ -47,14 +47,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
+    const currentToken = get().token;
+    // 1. Dọn sạch phiên cục bộ ngay lập tức để giao diện phản hồi tức thì
+    get().clearAuth();
+
+    // 2. Tắt chế độ tự động đăng nhập của Google Identity Services
     try {
-      if (get().token) {
-        await authApi.logout();
+      if ((window as any).google?.accounts?.id?.disableAutoSelect) {
+        (window as any).google.accounts.id.disableAutoSelect();
       }
-    } catch (err) {
-      console.error('Lỗi khi đăng xuất phía máy chủ:', err);
-    } finally {
-      get().clearAuth();
+    } catch (e) {
+      console.warn('Lỗi khi tắt Google auto-select:', e);
+    }
+
+    // 3. Thông báo thu hồi token và session phía backend
+    if (currentToken) {
+      try {
+        await authApi.logout();
+      } catch (err) {
+        console.warn('Không thể thu hồi phiên phía máy chủ:', err);
+      }
     }
   },
 

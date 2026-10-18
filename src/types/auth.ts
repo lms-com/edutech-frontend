@@ -1,4 +1,4 @@
-﻿export interface ApiResponse<T> {
+export interface ApiResponse<T> {
   code: number;
   message: string;
   data: T;
@@ -15,6 +15,8 @@ export interface LoginResponse {
   userId: string;
   email: string;
   permissions?: string[];
+  isNewUser?: boolean;
+  fullName?: string;
 }
 
 export interface RegisterRequest {
@@ -45,4 +47,66 @@ export interface User {
   email: string;
   fullName: string;
   roles: string[];
+}
+
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface VerifyOtpRequest {
+  email: string;
+  otp: string;
+}
+
+export interface ResetPasswordRequest {
+  email: string;
+  otp: string;
+  newPassword: string;
+}
+
+export interface RegisterInitRequest {
+  email: string;
+  fullName: string;
+  password: string;
+}
+
+export interface RegisterConfirmRequest {
+  email: string;
+  otp: string;
+  deviceFingerPrint?: string;
+}
+
+export interface GoogleLoginRequest {
+  idToken: string;
+  deviceFingerPrint: string;
+  password?: string;
+}
+
+export interface SecurityStatusResponse {
+  hasPin: boolean;
+  financialSessionActive: boolean;
+  remainingSeconds: number;
+}
+
+export interface SetupPinRequest {
+  pin: string;
+}
+
+export interface ChangePinRequest {
+  currentPin: string;
+  newPin: string;
+}
+
+export interface VerifyPinRequest {
+  pin: string;
+}
+
+export interface ResetPinRequest {
+  otp: string;
+  newPin: string;
+}
+
+export interface ChangePasswordWithOtpRequest {
+  otp: string;
+  newPassword: string;
 }

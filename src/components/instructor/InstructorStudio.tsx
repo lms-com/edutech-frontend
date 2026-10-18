@@ -1,7 +1,20 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Course, CourseSection, PayoutRequest } from '../../types';
-import { MOCK_PAYOUTS } from '../../data/mockData';
+import { 
+  Course, 
+  CourseSection, 
+  PayoutRequest, 
+  InstructorWalletBalance,
+  InstructorAnalyticsOverview,
+  RevenueChartPoint
+} from '../../types';
 import courseApi from '../../api/courseApi';
+import payoutApi from '../../api/payoutApi';
+import instructorAnalyticsApi from '../../api/instructorAnalyticsApi';
+import promotionApi, { type PromotionDto, type CreatePromotionPayload } from '../../api/promotionApi';
+import { securityApi } from '../../api/securityApi';
+import { FinancialPinModal } from '../security/FinancialPinModal';
+import { UserSecuritySettingsModal } from '../security/UserSecuritySettingsModal';
+import { LessonAttachmentsModal } from './LessonAttachmentsModal';
 import { formatVND } from '../../utils/format';
 import { 
   Users, 
@@ -11,6 +24,7 @@ import {
   Plus, 
   UploadCloud, 
   FileVideo, 
+  FileText,
   CheckCircle2, 
   Clock, 
   Send, 
@@ -24,6 +38,20 @@ import {
   HelpCircle,
   Loader2,
   AlertTriangle,
+  ShieldCheck,
+  ShieldAlert,
+  KeyRound,
+  Lock,
+  Shield,
+  BarChart3,
+  TrendingUp,
+  TrendingDown,
+  RefreshCw,
+  BookOpen,
+  Image as ImageIcon,
+  Tag,
+  Link2,
+  Unlink,
 } from 'lucide-react';
 
 interface InstructorStudioProps {
@@ -47,11 +75,24 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
   onBackToCourseList,
 }) => {
   const [currentCourse, setCurrentCourse] = useState<Course>(initialCourse);
-  const [activeTab, setActiveTab] = useState<'curriculum' | 'settings' | 'dashboard' | 'upload' | 'payouts'>('curriculum');
+  const [activeTab, setActiveTab] = useState<'curriculum' | 'settings' | 'dashboard' | 'upload' | 'payouts' | 'promotions'>('curriculum');
   const [curriculumLoading, setCurriculumLoading] = useState(false);
   const [curriculumError, setCurriculumError] = useState<string | null>(null);
   const [actionSuccessMsg, setActionSuccessMsg] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Promotions Management State
+  const [promotionsList, setPromotionsList] = useState<PromotionDto[]>([]);
+  const [promotionsLoading, setPromotionsLoading] = useState(false);
+  const [promotionsError, setPromotionsError] = useState<string | null>(null);
+  const [isCreatingPromo, setIsCreatingPromo] = useState(false);
+  const [promoFormCode, setPromoFormCode] = useState('');
+  const [promoDiscountType, setPromoDiscountType] = useState<'PERCENT' | 'AMOUNT'>('PERCENT');
+  const [promoDiscountValue, setPromoDiscountValue] = useState('20');
+  const [promoUsageLimit, setPromoUsageLimit] = useState('');
+  const [promoEndDate, setPromoEndDate] = useState('');
+  const [promoSubmitting, setPromoSubmitting] = useState(false);
+  const [promoActionLoadingId, setPromoActionLoadingId] = useState<string | null>(null);
 
   // Curriculum State
   const [sections, setSections] = useState<CourseSection[]>(initialCourse.sections || []);
@@ -66,12 +107,14 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
   const [lessonDurationMinutes, setLessonDurationMinutes] = useState(15);
   const [lessonVideoUrl, setLessonVideoUrl] = useState('');
   const [addingLesson, setAddingLesson] = useState(false);
+  const [attachmentModalLesson, setAttachmentModalLesson] = useState<{ id: string; title: string } | null>(null);
 
   // Course Settings Form State
   const [editTitle, setEditTitle] = useState(initialCourse.title);
   const [editDescription, setEditDescription] = useState(initialCourse.shortDescription);
   const [editPrice, setEditPrice] = useState(String(initialCourse.price));
   const [editLevel, setEditLevel] = useState(initialCourse.level || 'Cơ bản');
+  const [editThumbnailUrl, setEditThumbnailUrl] = useState(initialCourse.thumbnail || '');
   const [savingSettings, setSavingSettings] = useState(false);
 
   // Video Upload Simulation State
@@ -79,12 +122,117 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
   const [uploadStatus, setUploadStatus] = useState<'IDLE' | 'GETTING_PRESIGNED' | 'UPLOADING' | 'FFMPEG_PROCESSING' | 'COMPLETED'>('IDLE');
   const [selectedLessonTitle, setSelectedLessonTitle] = useState('Bài học');
 
-  // Payout Form State
-  const [payoutAmount, setPayoutAmount] = useState('5000000');
-  const [bankName, setBankName] = useState('Vietcombank (Chi nhánh Tân Bình)');
-  const [bankAccount, setBankAccount] = useState('0071001234567');
-  const [payoutList, setPayoutList] = useState<PayoutRequest[]>(MOCK_PAYOUTS);
+  // Payout & Wallet State
+  const [payoutAmount, setPayoutAmount] = useState('500000');
+  const [payoutList, setPayoutList] = useState<PayoutRequest[]>([]);
+  const [walletBalance, setWalletBalance] = useState<InstructorWalletBalance | null>(null);
+  const [payoutLoading, setPayoutLoading] = useState(false);
+  const [payoutError, setPayoutError] = useState<string | null>(null);
   const [payoutSuccessMsg, setPayoutSuccessMsg] = useState('');
+  const [payoutSubmitting, setPayoutSubmitting] = useState(false);
+
+  // Analytics & KPI State
+  const [analyticsOverview, setAnalyticsOverview] = useState<InstructorAnalyticsOverview | null>(null);
+  const [revenueChartData, setRevenueChartData] = useState<RevenueChartPoint[]>([]);
+  const [courseBreakdown, setCourseBreakdown] = useState<import('../../types').CourseRevenueBreakdown[]>([]);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
+
+  const loadAnalyticsData = useCallback(async () => {
+    setAnalyticsLoading(true);
+    setAnalyticsError(null);
+    try {
+      const [overview, chart, breakdown] = await Promise.all([
+        instructorAnalyticsApi.getOverview(),
+        instructorAnalyticsApi.getRevenueChart(),
+        instructorAnalyticsApi.getCourseBreakdown(),
+      ]);
+      setAnalyticsOverview(overview);
+      setRevenueChartData(chart);
+      setCourseBreakdown(breakdown);
+    } catch (err: any) {
+      console.error('Lỗi nạp dữ liệu thống kê giảng viên:', err);
+      setAnalyticsError(err?.message || 'Không thể tải số liệu phân tích doanh thu.');
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, []);
+
+  // Financial Security & Step-up PIN State
+  const [financialSessionActive, setFinancialSessionActive] = useState(false);
+  const [financialRemaining, setFinancialRemaining] = useState(0);
+  const [hasPin, setHasPin] = useState(false);
+  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+  const [isSecuritySettingsOpen, setIsSecuritySettingsOpen] = useState(false);
+
+  const checkFinancialStatus = useCallback(async () => {
+    try {
+      const res = await securityApi.getStatus();
+      const data = res.data;
+      setHasPin(Boolean(data?.hasPin));
+      setFinancialSessionActive(Boolean(data?.financialSessionActive));
+      setFinancialRemaining(data?.remainingSeconds || 0);
+      return data;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const loadPayoutData = useCallback(async () => {
+    setPayoutLoading(true);
+    setPayoutError(null);
+    try {
+      const [balanceRes, payoutsRes] = await Promise.all([
+        payoutApi.getMyBalance(),
+        payoutApi.getMyPayoutRequests({ page: 0, size: 20 }),
+      ]);
+      setWalletBalance(balanceRes);
+      setPayoutList(payoutsRes.items);
+    } catch (err: any) {
+      console.error('Lỗi nạp dữ liệu ví & rút tiền:', err);
+      setPayoutError(err?.message || 'Không thể tải thông tin ví và lịch sử rút tiền.');
+    } finally {
+      setPayoutLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let timer: any;
+    if (financialSessionActive && financialRemaining > 0) {
+      timer = setTimeout(() => {
+        setFinancialRemaining(prev => {
+          if (prev <= 1) {
+            setFinancialSessionActive(false);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [financialSessionActive, financialRemaining]);
+
+  const handleFinancialUnlocked = useCallback(() => {
+    setFinancialSessionActive(true);
+    setFinancialRemaining(15 * 60);
+    void loadPayoutData();
+  }, [loadPayoutData]);
+
+  const handleLockFinancialSession = async () => {
+    try {
+      await securityApi.lockSession();
+    } catch {
+      // Ignore
+    }
+    setFinancialSessionActive(false);
+    setFinancialRemaining(0);
+  };
+
+  const formatCountdown = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
 
   const loadCourseData = useCallback(async () => {
     setCurriculumLoading(true);
@@ -107,6 +255,104 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
   useEffect(() => {
     void loadCourseData();
   }, [loadCourseData]);
+
+  useEffect(() => {
+    if (activeTab === 'payouts') {
+      checkFinancialStatus().then(status => {
+        if (status?.financialSessionActive) {
+          void loadPayoutData();
+        } else {
+          setIsPinModalOpen(true);
+        }
+      });
+    }
+    if (activeTab === 'dashboard') {
+      void loadAnalyticsData();
+    }
+    if (activeTab === 'promotions') {
+      void loadPromotions();
+    }
+  }, [activeTab, checkFinancialStatus, loadPayoutData, loadAnalyticsData]);
+
+  const loadPromotions = useCallback(async () => {
+    setPromotionsLoading(true);
+    setPromotionsError(null);
+    try {
+      const page = await promotionApi.getMyPromotions({ page: 0, size: 50 });
+      setPromotionsList(page.items);
+    } catch (err: any) {
+      console.error('Lỗi tải mã giảm giá:', err);
+      setPromotionsError(err?.message || 'Không thể tải danh sách mã giảm giá.');
+    } finally {
+      setPromotionsLoading(false);
+    }
+  }, []);
+
+  const handleCreatePromo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!promoFormCode.trim()) {
+      setPromotionsError('Vui lòng nhập mã giảm giá.');
+      return;
+    }
+    setPromoSubmitting(true);
+    setPromotionsError(null);
+    try {
+      const payload: CreatePromotionPayload = {
+        code: promoFormCode.trim().toUpperCase(),
+        discountPercent: promoDiscountType === 'PERCENT' ? Number(promoDiscountValue) : null,
+        discountAmount: promoDiscountType === 'AMOUNT' ? Number(promoDiscountValue) : null,
+        usageLimit: promoUsageLimit ? Number(promoUsageLimit) : null,
+        endDate: promoEndDate ? `${promoEndDate}T23:59:59` : null,
+      };
+      const newPromo = await promotionApi.createPromotion(payload);
+      // Tự động gắn vào khóa học hiện tại
+      await promotionApi.attachToCourse(newPromo.id, currentCourse.id);
+      showSuccess(`Đã tạo mã giảm giá [${newPromo.code}] và áp dụng cho khóa học thành công!`);
+      setIsCreatingPromo(false);
+      setPromoFormCode('');
+      setPromoDiscountValue('20');
+      setPromoUsageLimit('');
+      setPromoEndDate('');
+      void loadPromotions();
+    } catch (err: any) {
+      setPromotionsError(err?.message || 'Không thể tạo mã giảm giá.');
+    } finally {
+      setPromoSubmitting(false);
+    }
+  };
+
+  const handleToggleCourseAttach = async (promo: PromotionDto) => {
+    const isAttached = (promo.appliedCourseIds || []).includes(currentCourse.id);
+    setPromoActionLoadingId(promo.id);
+    try {
+      if (isAttached) {
+        await promotionApi.detachFromCourse(promo.id, currentCourse.id);
+        showSuccess(`Đã gỡ mã [${promo.code}] khỏi khóa học này.`);
+      } else {
+        await promotionApi.attachToCourse(promo.id, currentCourse.id);
+        showSuccess(`Đã kích hoạt mã [${promo.code}] cho khóa học này!`);
+      }
+      void loadPromotions();
+    } catch (err: any) {
+      setPromotionsError(err?.message || 'Thao tác liên kết mã thất bại.');
+    } finally {
+      setPromoActionLoadingId(null);
+    }
+  };
+
+  const handleDeletePromo = async (promoId: string, code: string) => {
+    if (!confirm(`Bạn có chắc muốn xóa mã giảm giá [${code}]?`)) return;
+    setPromoActionLoadingId(promoId);
+    try {
+      await promotionApi.deletePromotion(promoId);
+      showSuccess(`Đã xóa mã giảm giá [${code}].`);
+      void loadPromotions();
+    } catch (err: any) {
+      setPromotionsError(err?.message || 'Không thể xóa mã giảm giá.');
+    } finally {
+      setPromoActionLoadingId(null);
+    }
+  };
 
   const showSuccess = (msg: string) => {
     setActionSuccessMsg(msg);
@@ -151,11 +397,16 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
       const updated = await courseApi.updateCourse(currentCourse.id, {
         title: editTitle.trim(),
         description: editDescription.trim(),
+        thumbnailUrl: editThumbnailUrl.trim() || undefined,
         basePrice: Math.max(0, Number(editPrice) || 0),
         level: levelMap[editLevel] || 'BEGINNER',
       });
-      setCurrentCourse(prev => ({ ...prev, ...updated }));
-      showSuccess('Cập nhật thông tin khóa học thành công!');
+      setCurrentCourse(prev => ({ 
+        ...prev, 
+        ...updated,
+        thumbnail: editThumbnailUrl.trim() || prev.thumbnail 
+      }));
+      showSuccess('Cập nhật thông tin và hình ảnh khóa học thành công!');
     } catch (err: any) {
       setCurriculumError(err?.message || 'Không thể cập nhật khóa học.');
     } finally {
@@ -268,26 +519,33 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
     }, 800);
   };
 
-  const handleCreatePayoutRequest = (e: React.FormEvent) => {
+  const handleCreatePayoutRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    const amountNum = parseInt(payoutAmount);
-    if (isNaN(amountNum) || amountNum <= 0) return;
+    const amountNum = Number(payoutAmount);
+    if (isNaN(amountNum) || amountNum < 500000) {
+      setPayoutError('Số tiền rút tối thiểu là 500.000 VNĐ theo quy định của hệ thống.');
+      return;
+    }
+    if (walletBalance && walletBalance.availableBalance > 0 && amountNum > walletBalance.availableBalance) {
+      setPayoutError(`Số dư khả dụng hiện tại (${formatVND(walletBalance.availableBalance)}) không đủ để tạo yêu cầu rút này.`);
+      return;
+    }
 
-    const newReq: PayoutRequest = {
-      id: `pay_${Date.now()}`,
-      instructorId: currentCourse.instructor?.id || 'inst_01',
-      instructorName: currentCourse.instructor?.name || 'Giảng viên',
-      amount: amountNum,
-      bankName: bankName,
-      bankAccount: bankAccount,
-      bankOwner: 'GIANG VIEN',
-      status: 'PENDING',
-      requestedAt: 'Vừa xong'
-    };
+    setPayoutSubmitting(true);
+    setPayoutError(null);
+    setPayoutSuccessMsg('');
 
-    setPayoutList([newReq, ...payoutList]);
-    setPayoutSuccessMsg(`[Bản mẫu] Yêu cầu rút ${formatVND(amountNum)} được ghi nhận trên giao diện mô phỏng.`);
-    setTimeout(() => setPayoutSuccessMsg(''), 5000);
+    try {
+      await payoutApi.createPayoutRequest(amountNum);
+      setPayoutSuccessMsg(`Đã gửi yêu cầu rút ${formatVND(amountNum)} thành công. Số tiền đã được tạm khóa và đang chờ Quản trị viên duyệt.`);
+      await loadPayoutData();
+      setTimeout(() => setPayoutSuccessMsg(''), 6000);
+    } catch (err: any) {
+      console.error('Lỗi tạo lệnh rút tiền:', err);
+      setPayoutError(err?.message || 'Không thể tạo yêu cầu rút tiền. Vui lòng kiểm tra tài khoản ngân hàng và số dư ví.');
+    } finally {
+      setPayoutSubmitting(false);
+    }
   };
 
   const statusUpper = (currentCourse.status || 'DRAFT').toUpperCase();
@@ -400,7 +658,8 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
         {[
           { id: 'curriculum', label: 'Soạn giáo trình (Curriculum)', icon: Layers },
           { id: 'settings', label: 'Cài đặt khóa học', icon: Settings },
-          { id: 'dashboard', label: 'Bảng số liệu KPI', icon: Users },
+          { id: 'dashboard', label: 'Thống kê & Doanh thu KPI', icon: BarChart3 },
+          { id: 'promotions', label: 'Mã giảm giá & Voucher', icon: Tag },
           { id: 'upload', label: 'Upload Video MinIO (HLS)', icon: UploadCloud },
           { id: 'payouts', label: 'Ví & Yêu cầu Rút tiền', icon: Wallet }
         ].map(t => (
@@ -527,8 +786,16 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
                           )}
                         </div>
 
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2.5">
                           <span className="text-slate-400 font-mono text-[11px]">{lesson.durationMinutes} phút</span>
+                          <button
+                            onClick={() => setAttachmentModalLesson({ id: lesson.id, title: lesson.title })}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:text-[#e74c3c] bg-slate-100 hover:bg-rose-50 rounded-lg transition border border-slate-200 hover:border-rose-200 cursor-pointer"
+                            title="Quản lý tài liệu đính kèm"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>Tài liệu</span>
+                          </button>
                           <button
                             onClick={() => handleDeleteLesson(lesson.id, lesson.title)}
                             className="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50 transition cursor-pointer"
@@ -704,6 +971,43 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
               </label>
             </div>
 
+            {/* Chỉnh sửa Ảnh bìa khóa học */}
+            <div className="space-y-1.5 pt-1">
+              <label className="block text-xs font-bold text-slate-700">
+                Hình ảnh đại diện khóa học (Thumbnail URL)
+              </label>
+              <div className="relative">
+                <ImageIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="url"
+                  value={editThumbnailUrl}
+                  onChange={e => setEditThumbnailUrl(e.target.value)}
+                  placeholder="https://images.unsplash.com/... hoặc dán link ảnh trực tiếp"
+                  className="w-full pl-9 pr-3.5 py-2.5 border border-slate-300 rounded-xl text-xs focus:outline-none focus:border-[#2c3e50]"
+                />
+              </div>
+
+              {/* Preview Thumbnail */}
+              {editThumbnailUrl.trim() && (
+                <div className="relative mt-2 rounded-xl overflow-hidden border border-slate-200 aspect-video max-h-44 bg-slate-100 flex items-center justify-center">
+                  <img
+                    src={editThumbnailUrl}
+                    alt="Xem trước ảnh bìa"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800';
+                    }}
+                  />
+                  <span className="absolute bottom-2 right-2 px-2.5 py-1 rounded-md text-[10px] font-bold bg-black/60 text-white backdrop-blur-xs">
+                    Ảnh bìa đang hiển thị
+                  </span>
+                </div>
+              )}
+              <p className="text-[10px] text-slate-400">
+                Hình ảnh hiển thị với học viên tại trang danh mục và trang chi tiết khóa học.
+              </p>
+            </div>
+
             <button
               disabled={savingSettings || !editTitle.trim()}
               type="submit"
@@ -716,50 +1020,312 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
         </div>
       )}
 
-      {/* TAB 3: KPI DASHBOARD (MOCK WITH CLEAR NOTICE) */}
+      {/* TAB 3: LIVE KPI DASHBOARD & REVENUE ANALYTICS */}
       {activeTab === 'dashboard' && (
-        <div className="space-y-6">
-          <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
-            <strong>Bản mẫu giao diện:</strong> Các số liệu thống kê doanh thu và lượt học dưới đây hiện là dữ liệu mẫu trực quan; backend hiện chưa có endpoint tổng hợp KPI theo giảng viên.
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
-              <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
-                <span>Tổng học viên đang học</span>
-                <Users className="w-4 h-4 text-blue-500" />
-              </div>
-              <h3 className="text-2xl font-black text-[#2c3e50]">18,450</h3>
-              <span className="text-[11px] text-emerald-600 font-semibold">+14.2% so với tháng trước</span>
+        <div className="space-y-6 animate-in fade-in">
+          {/* Header Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+            <div>
+              <h3 className="text-base font-bold text-[#2c3e50] flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-indigo-600" />
+                Trung Tâm Phân Tích & Thống Kê Doanh Thu Giảng Viên
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Dữ liệu tài chính, lượt học viên đăng ký và dòng tiền thực tế được đồng bộ trực tiếp từ Finance & Course Service.
+              </p>
             </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
-              <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
-                <span>Doanh thu trong tháng</span>
-                <DollarSign className="w-4 h-4 text-emerald-500" />
-              </div>
-              <h3 className="text-2xl font-black text-[#2c3e50]">64,500,000 đ</h3>
-              <span className="text-[11px] text-emerald-600 font-semibold">82 lượt mua mới</span>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
-              <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
-                <span>Số dư ví khả dụng</span>
-                <Wallet className="w-4 h-4 text-[#e74c3c]" />
-              </div>
-              <h3 className="text-2xl font-black text-[#e74c3c]">18,500,000 đ</h3>
-              <span className="text-[11px] text-slate-400">Sẵn sàng để rút về ngân hàng</span>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
-              <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
-                <span>Điểm đánh giá trung bình</span>
-                <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
-              </div>
-              <h3 className="text-2xl font-black text-[#2c3e50]">4.9 / 5.0</h3>
-              <span className="text-[11px] text-slate-400">Từ 1,240 đánh giá</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void loadAnalyticsData()}
+                disabled={analyticsLoading}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+                title="Làm mới số liệu"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${analyticsLoading ? 'animate-spin' : ''}`} />
+                Làm mới
+              </button>
             </div>
           </div>
+
+          {analyticsError && (
+            <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 font-medium flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{analyticsError}</span>
+            </div>
+          )}
+
+          {analyticsLoading ? (
+            <div className="p-16 text-center text-slate-400 flex flex-col items-center justify-center gap-2 bg-white rounded-2xl border border-slate-200">
+              <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+              <span className="text-xs font-medium">Đang tổng hợp số liệu doanh thu và học viên từ máy chủ...</span>
+            </div>
+          ) : (
+            <>
+              {/* 4 KPI Summary Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                {/* Total Students */}
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2 relative overflow-hidden">
+                  <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
+                    <span>Tổng học viên đã đăng ký</span>
+                    <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                      <Users className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <h3 className="text-2xl font-black text-[#2c3e50]">
+                    {(analyticsOverview?.totalStudents ?? 0).toLocaleString()}
+                  </h3>
+                  <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
+                    <span className="text-blue-600 font-bold">
+                      +{analyticsOverview?.thisMonthSales ?? 0}
+                    </span>
+                    <span>lượt mua trong tháng này</span>
+                  </div>
+                </div>
+
+                {/* This Month Revenue */}
+                <div className="bg-white p-5 rounded-2xl border border-emerald-200 shadow-xs space-y-2 relative overflow-hidden bg-gradient-to-br from-white to-emerald-50/20">
+                  <div className="flex items-center justify-between text-emerald-800 text-xs font-semibold">
+                    <span>Doanh thu tháng này</span>
+                    <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+                      <DollarSign className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <h3 className="text-2xl font-black text-emerald-700">
+                    {formatVND(analyticsOverview?.thisMonthRevenue ?? 0)}
+                  </h3>
+                  <div className="flex items-center gap-1.5 text-[11px]">
+                    <span className={`inline-flex items-center gap-0.5 font-bold px-1.5 py-0.5 rounded ${
+                      (analyticsOverview?.growthRate ?? 0) >= 0 
+                        ? 'bg-emerald-100 text-emerald-800' 
+                        : 'bg-rose-100 text-rose-800'
+                    }`}>
+                      {(analyticsOverview?.growthRate ?? 0) >= 0 ? (
+                        <TrendingUp className="w-3 h-3 text-emerald-700" />
+                      ) : (
+                        <TrendingDown className="w-3 h-3 text-rose-700" />
+                      )}
+                      {(analyticsOverview?.growthRate ?? 0) >= 0 ? '+' : ''}
+                      {analyticsOverview?.growthRate ?? 0}%
+                    </span>
+                    <span className="text-slate-400">so với tháng trước</span>
+                  </div>
+                </div>
+
+                {/* Available Balance */}
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2 relative overflow-hidden">
+                  <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
+                    <span>Số dư ví khả dụng</span>
+                    <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                      <Wallet className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <h3 className="text-2xl font-black text-[#e74c3c]">
+                    {formatVND(analyticsOverview?.availableBalance ?? 0)}
+                  </h3>
+                  <div className="flex items-center justify-between text-[11px] text-slate-500">
+                    <span>Tạm khóa: {formatVND(analyticsOverview?.pendingBalance ?? 0)}</span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('payouts')}
+                      className="text-indigo-600 hover:text-indigo-700 font-bold hover:underline cursor-pointer"
+                    >
+                      Rút tiền →
+                    </button>
+                  </div>
+                </div>
+
+                {/* Total Courses & All Time Revenue */}
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2 relative overflow-hidden">
+                  <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
+                    <span>Tổng khóa học & Doanh thu</span>
+                    <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                      <BookOpen className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <h3 className="text-2xl font-black text-[#2c3e50]">
+                    {analyticsOverview?.totalCourses ?? 0} khóa học
+                  </h3>
+                  <div className="text-[11px] text-slate-500">
+                    Trọn đời: <strong className="text-slate-700 font-bold">{formatVND(analyticsOverview?.allTimeRevenue ?? 0)}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* REVENUE TREND CHART (6 MONTHS) */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4">
+                  <div>
+                    <h4 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-emerald-600" />
+                      Biểu Đồ Xu Hướng Doanh Thu (6 Tháng Gần Nhất)
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Theo dõi số tiền thực nhận (hoa hồng sau khi trừ phí sàn) và tổng số lượt bán khóa học theo từng tháng.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs">
+                    <span className="flex items-center gap-1.5 text-slate-600">
+                      <span className="w-3 h-3 rounded-sm bg-emerald-500 inline-block"></span>
+                      Doanh thu thực nhận
+                    </span>
+                    <span className="flex items-center gap-1.5 text-slate-600">
+                      <span className="w-3 h-3 rounded-sm bg-indigo-200 inline-block"></span>
+                      Tổng doanh số gộp
+                    </span>
+                  </div>
+                </div>
+
+                {/* Visual Chart Bars */}
+                {revenueChartData.length === 0 ? (
+                  <div className="py-12 text-center text-slate-400 text-xs border border-dashed border-slate-200 rounded-xl">
+                    Chưa có dữ liệu giao dịch phát sinh trong 6 tháng gần nhất.
+                  </div>
+                ) : (
+                  <div className="space-y-6 pt-2">
+                    <div className="grid grid-cols-6 gap-2 sm:gap-4 h-56 items-end pb-2 border-b border-slate-200">
+                      {(() => {
+                        const maxVal = Math.max(
+                          ...revenueChartData.map(d => Math.max(d.grossSales, d.revenue)),
+                          1000000
+                        );
+                        return revenueChartData.map((pt, idx) => {
+                          const revPct = Math.min(100, Math.max(6, Math.round((pt.revenue / maxVal) * 100)));
+                          const grossPct = Math.min(100, Math.max(8, Math.round((pt.grossSales / maxVal) * 100)));
+
+                          return (
+                            <div key={pt.period || idx} className="flex flex-col items-center h-full justify-end group relative">
+                              {/* Hover Tooltip */}
+                              <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-16 z-20 bg-slate-900 text-white text-[10px] p-2 rounded-lg shadow-xl pointer-events-none whitespace-nowrap space-y-0.5">
+                                <p className="font-bold text-amber-300">{pt.label}</p>
+                                <p>Thực nhận: <strong>{formatVND(pt.revenue)}</strong></p>
+                                <p className="text-slate-300">Doanh số: {formatVND(pt.grossSales)} ({pt.orderCount} đơn)</p>
+                              </div>
+
+                              <div className="w-full flex items-end justify-center gap-1 sm:gap-2 h-full pb-1">
+                                {/* Gross Sales Bar */}
+                                <div
+                                  style={{ height: `${grossPct}%` }}
+                                  className="w-3 sm:w-5 bg-indigo-100 group-hover:bg-indigo-200 rounded-t-md transition-all duration-500"
+                                  title={`Doanh số gộp: ${formatVND(pt.grossSales)}`}
+                                />
+                                {/* Net Revenue Bar */}
+                                <div
+                                  style={{ height: `${revPct}%` }}
+                                  className="w-4 sm:w-7 bg-emerald-600 group-hover:bg-emerald-500 rounded-t-md transition-all duration-500 shadow-xs relative"
+                                  title={`Thực nhận: ${formatVND(pt.revenue)}`}
+                                >
+                                  {pt.revenue > 0 && (
+                                    <div className="hidden sm:block absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] font-bold text-emerald-800">
+                                      {pt.orderCount > 0 ? `${pt.orderCount}đ` : ''}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              <span className="text-[11px] font-bold text-slate-700 mt-2 block">
+                                {pt.label}
+                              </span>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+
+                    {/* Detailed Data Table for 6 Months */}
+                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                      <table className="w-full text-left text-xs min-w-[500px]">
+                        <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                          <tr>
+                            <th className="p-3">Kỳ báo cáo</th>
+                            <th className="p-3">Doanh thu thực nhận</th>
+                            <th className="p-3">Tổng giá trị doanh số</th>
+                            <th className="p-3 text-right">Lượt mua</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-slate-700">
+                          {revenueChartData.map(pt => (
+                            <tr key={pt.period} className="hover:bg-slate-50/80 transition">
+                              <td className="p-3 font-bold text-slate-900">{pt.label}</td>
+                              <td className="p-3 font-bold text-emerald-700">{formatVND(pt.revenue)}</td>
+                              <td className="p-3 text-slate-600">{formatVND(pt.grossSales)}</td>
+                              <td className="p-3 text-right">
+                                <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 font-bold text-[11px]">
+                                  {pt.orderCount} đơn
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* DETAILED COURSE REVENUE BREAKDOWN TABLE */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+                <div>
+                  <h4 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-indigo-600" />
+                    Thống Kê Doanh Thu Chi Tiết Từng Khóa Học
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Số liệu doanh thu gộp, tỷ lệ khấu trừ phí sàn (30%) và doanh thu thực nhận (70%) phân bổ cho từng khóa học.
+                  </p>
+                </div>
+
+                {courseBreakdown.length === 0 ? (
+                  <div className="py-8 text-center text-slate-400 text-xs border border-dashed border-slate-200 rounded-xl">
+                    Chưa có giao dịch phát sinh doanh thu cho các khóa học.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="w-full text-left text-xs min-w-[650px]">
+                      <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                        <tr>
+                          <th className="p-3">Khóa học</th>
+                          <th className="p-3">Giá bán gốc</th>
+                          <th className="p-3 text-center">Lượt bán</th>
+                          <th className="p-3">Doanh thu gộp</th>
+                          <th className="p-3">Phí sàn (30%)</th>
+                          <th className="p-3 text-right">Thực nhận (70%)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-700">
+                        {courseBreakdown.map(item => (
+                          <tr key={item.courseId} className="hover:bg-slate-50/80 transition">
+                            <td className="p-3">
+                              <p className="font-bold text-slate-900">{item.courseTitle}</p>
+                              <p className="text-[10px] text-slate-400 font-mono">ID: {item.courseId}</p>
+                            </td>
+                            <td className="p-3 font-mono text-slate-600">{formatVND(item.basePrice)}</td>
+                            <td className="p-3 text-center">
+                              <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold text-[11px]">
+                                {item.salesCount} đơn
+                              </span>
+                            </td>
+                            <td className="p-3 font-semibold text-slate-800">{formatVND(item.grossRevenue)}</td>
+                            <td className="p-3 text-rose-600 font-medium">-{formatVND(item.platformFee)}</td>
+                            <td className="p-3 text-right font-black text-emerald-700 text-sm">{formatVND(item.netRevenue)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-slate-50 font-bold text-slate-900 border-t border-slate-200">
+                        <tr>
+                          <td className="p-3" colSpan={2}>Tổng cộng:</td>
+                          <td className="p-3 text-center">{courseBreakdown.reduce((sum, i) => sum + i.salesCount, 0)} đơn</td>
+                          <td className="p-3">{formatVND(courseBreakdown.reduce((sum, i) => sum + i.grossRevenue, 0))}</td>
+                          <td className="p-3 text-rose-600">-{formatVND(courseBreakdown.reduce((sum, i) => sum + i.platformFee, 0))}</td>
+                          <td className="p-3 text-right text-emerald-700 text-sm font-black">{formatVND(courseBreakdown.reduce((sum, i) => sum + i.netRevenue, 0))}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -835,111 +1401,552 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
         </div>
       )}
 
-      {/* TAB 5: WALLET & PAYOUTS (MOCK WITH CLEAR NOTICE) */}
+      {/* TAB 5: WALLET & PAYOUTS (REAL DATA CONNECTED TO FINANCE SERVICE) */}
       {activeTab === 'payouts' && (
-        <div className="space-y-6">
-          <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
-            <strong>Bản mẫu tính năng Rút tiền:</strong> Controller Payout phía backend hiện là class rỗng. Thao tác gửi yêu cầu dưới đây chỉ cập nhật trên giao diện mô phỏng để minh họa luồng nghiệp vụ.
+        !financialSessionActive ? (
+          <div className="bg-white p-12 rounded-2xl border border-amber-200 text-center max-w-lg mx-auto space-y-4 shadow-xs animate-in fade-in">
+            <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200">
+              <ShieldAlert className="w-8 h-8" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-800">Khu Vực Quản Lý Tiền Đang Được Khóa</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto leading-relaxed">
+                Để bảo vệ an toàn cho doanh thu và tài khoản ngân hàng của giảng viên, vui lòng nhập mã PIN bảo mật cấp 2 để mở khóa phiên làm việc (15 phút).
+              </p>
+            </div>
+            <div className="pt-2 flex flex-col sm:flex-row gap-2 justify-center">
+              <button
+                type="button"
+                onClick={() => setIsPinModalOpen(true)}
+                className="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <KeyRound className="w-4 h-4" />
+                {hasPin ? 'Mở Khóa Bằng Mã PIN Ví' : 'Thiết Lập Mã PIN Lần Đầu'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Session status banner */}
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs animate-in fade-in">
+              <div className="flex items-center gap-2 text-amber-900 font-medium">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Phiên bảo mật ví đang hoạt động (Thời gian còn: <strong className="font-mono text-amber-950 font-bold">{formatCountdown(financialRemaining)}</strong>)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSecuritySettingsOpen(true)}
+                  className="px-2.5 py-1 text-slate-600 hover:text-slate-800 hover:bg-amber-100 rounded-lg transition font-semibold cursor-pointer text-[11px]"
+                >
+                  Đổi PIN / Mật khẩu
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLockFinancialSession}
+                  className="px-2.5 py-1 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition font-bold cursor-pointer text-[11px]"
+                >
+                  Khóa ví ngay
+                </button>
+              </div>
+            </div>
+
+            {/* Wallet Balance KPI Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white p-5 rounded-2xl border border-emerald-200 shadow-xs relative overflow-hidden">
+                <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">Số dư khả dụng</span>
+                <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+                  <Wallet className="w-4 h-4" />
+                </div>
+              </div>
+              <p className="text-2xl font-black text-emerald-700">
+                {formatVND(walletBalance?.availableBalance ?? 0)}
+              </p>
+              <p className="text-[11px] text-slate-500 mt-1">Có thể tạo lệnh rút tiền ngay</p>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-amber-200 shadow-xs relative overflow-hidden">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-700">Đang chờ rút</span>
+                <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                  <Clock className="w-4 h-4" />
+                </div>
+              </div>
+              <p className="text-2xl font-black text-amber-700">
+                {formatVND(walletBalance?.blockedBalance ?? 0)}
+              </p>
+              <p className="text-[11px] text-slate-500 mt-1">Đang tạm khóa trong lệnh rút</p>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-blue-200 shadow-xs relative overflow-hidden">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-blue-700">Chờ giải phóng</span>
+                <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                  <DollarSign className="w-4 h-4" />
+                </div>
+              </div>
+              <p className="text-2xl font-black text-blue-700">
+                {formatVND(walletBalance?.pendingBalance ?? 0)}
+              </p>
+              <p className="text-[11px] text-slate-500 mt-1">Tự động giải phóng sau 3 ngày</p>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs relative overflow-hidden">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-600">Tổng số dư ví</span>
+                <div className="p-2 bg-slate-50 text-slate-600 rounded-xl">
+                  <CreditCard className="w-4 h-4" />
+                </div>
+              </div>
+              <p className="text-2xl font-black text-slate-800">
+                {formatVND(walletBalance?.actualBalance ?? 0)}
+              </p>
+              <p className="text-[11px] text-slate-500 mt-1">Thực tế trong tài khoản</p>
+            </div>
+          </div>
+
+          <div role="status" className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-3.5 text-xs leading-relaxed text-indigo-950 flex items-start gap-2.5">
+            <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-indigo-900">Quy định rút tiền doanh thu giảng viên:</p>
+              <p className="text-indigo-800 text-[11px] mt-0.5">
+                Mỗi lệnh rút tối thiểu 500.000 VNĐ. Số tiền sẽ được tạm khóa từ số dư khả dụng và giải ngân về số tài khoản ngân hàng chính của giảng viên sau khi Quản trị viên duyệt lệnh.
+              </p>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-              <h3 className="font-bold text-base text-[#2c3e50] flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-[#e74c3c]" />
-                Tạo Yêu Cầu Rút Tiền
-              </h3>
+            {/* Form tạo yêu cầu rút */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-emerald-600" />
+                  Tạo Yêu Cầu Rút Tiền
+                </h3>
+              </div>
 
               {payoutSuccessMsg && (
-                <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-xs text-emerald-800 font-medium">
-                  {payoutSuccessMsg}
+                <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-xs text-emerald-800 font-medium flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span>{payoutSuccessMsg}</span>
                 </div>
               )}
 
-              <form onSubmit={handleCreatePayoutRequest} className="space-y-3">
+              {payoutError && (
+                <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-xs text-rose-800 font-medium flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <span>{payoutError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleCreatePayoutRequest} className="space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Số tiền cần rút (VNĐ):
                   </label>
                   <input
                     type="number"
+                    min="500000"
+                    step="10000"
                     value={payoutAmount}
                     onChange={e => setPayoutAmount(e.target.value)}
-                    className="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-bold text-[#2c3e50]"
+                    placeholder="Tối thiểu 500,000"
+                    className="w-full p-2.5 border border-slate-300 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600"
                   />
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {[500000, 1000000, 2000000, 5000000].map(val => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setPayoutAmount(String(val))}
+                        className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold transition cursor-pointer"
+                      >
+                        +{formatVND(val)}
+                      </button>
+                    ))}
+                    {walletBalance && walletBalance.availableBalance >= 500000 && (
+                      <button
+                        type="button"
+                        onClick={() => setPayoutAmount(String(walletBalance.availableBalance))}
+                        className="px-2 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-[10px] font-bold transition cursor-pointer"
+                      >
+                        Rút tất cả
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Ngân hàng thụ hưởng:
-                  </label>
-                  <input
-                    type="text"
-                    value={bankName}
-                    onChange={e => setBankName(e.target.value)}
-                    className="w-full p-2.5 border border-slate-300 rounded-xl text-xs text-slate-700"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Số tài khoản:
-                  </label>
-                  <input
-                    type="text"
-                    value={bankAccount}
-                    onChange={e => setBankAccount(e.target.value)}
-                    className="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-mono text-slate-700"
-                  />
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1">
+                  <p className="font-semibold text-slate-700">Tài khoản nhận tiền:</p>
+                  <p className="text-[11px] text-slate-500">
+                    Hệ thống tự động sử dụng tài khoản ngân hàng chính đã đăng ký trong hồ sơ giảng viên của bạn.
+                  </p>
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full py-3 bg-[#e74c3c] hover:bg-[#c0392b] text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  disabled={payoutSubmitting}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <Send className="w-3.5 h-3.5" />
-                  Gửi Yêu Cầu Chờ Phê Duyệt
+                  {payoutSubmitting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Đang gửi yêu cầu...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-3.5 h-3.5" />
+                      Gửi Lệnh Rút Tiền
+                    </>
+                  )}
                 </button>
               </form>
             </div>
 
-            <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-              <h3 className="font-bold text-base text-[#2c3e50]">Lịch Sử Yêu Cầu Rút Tiền</h3>
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
-                    <tr>
-                      <th className="p-3">Mã GD</th>
-                      <th className="p-3">Số tiền</th>
-                      <th className="p-3">Ngân hàng</th>
-                      <th className="p-3">Trạng thái</th>
-                      <th className="p-3">Thời gian</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {payoutList.map(item => (
-                      <tr key={item.id} className="hover:bg-slate-50">
-                        <td className="p-3 font-mono text-slate-500">{item.id}</td>
-                        <td className="p-3 font-bold text-[#2c3e50]">
-                          {formatVND(item.amount)}
-                        </td>
-                        <td className="p-3 text-slate-600">{item.bankName}</td>
-                        <td className="p-3">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            item.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                          }`}>
-                            {item.status === 'APPROVED' ? 'Đã duyệt chi' : 'Chờ Admin duyệt'}
-                          </span>
-                        </td>
-                        <td className="p-3 text-slate-400">{item.requestedAt}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {/* Bảng lịch sử yêu cầu rút */}
+            <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-base text-slate-900">Lịch Sử Yêu Cầu Rút Tiền</h3>
+                  <p className="text-xs text-slate-500">Theo dõi tiến độ duyệt chi và thông tin giải ngân.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void loadPayoutData()}
+                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer"
+                >
+                  Làm mới
+                </button>
               </div>
+
+              {payoutLoading ? (
+                <div className="p-12 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
+                  <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+                  <span className="text-xs">Đang tải lịch sử rút tiền...</span>
+                </div>
+              ) : payoutList.length === 0 ? (
+                <div className="p-12 text-center text-slate-400 border border-dashed border-slate-200 rounded-xl">
+                  <CreditCard className="w-8 h-8 mx-auto mb-2 opacity-40 text-slate-400" />
+                  <p className="text-xs font-medium">Chưa có yêu cầu rút tiền nào.</p>
+                </div>
+              ) : (
+                <div className="border border-slate-200 rounded-xl overflow-x-auto">
+                  <table className="w-full text-left text-xs min-w-[500px]">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                      <tr>
+                        <th className="p-3">Mã GD</th>
+                        <th className="p-3">Số tiền</th>
+                        <th className="p-3">Ngân hàng</th>
+                        <th className="p-3">Trạng thái</th>
+                        <th className="p-3">Thời gian</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {payoutList.map(item => (
+                        <tr key={item.id} className="hover:bg-slate-50 transition">
+                          <td className="p-3 font-mono text-[11px] text-slate-500">{item.id}</td>
+                          <td className="p-3 font-bold text-emerald-700 text-sm">
+                            {formatVND(item.amount)}
+                          </td>
+                          <td className="p-3 text-slate-600">
+                            <div>{item.bankName}</div>
+                            {item.bankAccount && (
+                              <div className="font-mono text-[11px] text-slate-500">
+                                {item.bankAccount} {item.bankOwner ? `(${item.bankOwner})` : ''}
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                              item.status === 'APPROVED' || item.status === 'SUCCESS'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                : item.status === 'REJECTED'
+                                ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                                : 'bg-amber-100 text-amber-800 border border-amber-200'
+                            }`}>
+                              {item.status === 'APPROVED' || item.status === 'SUCCESS'
+                                ? 'Đã duyệt chi'
+                                : item.status === 'REJECTED'
+                                ? 'Bị từ chối'
+                                : 'Chờ Admin duyệt'}
+                            </span>
+                            {item.rejectReason && (
+                              <p className="text-[10px] text-rose-600 mt-1">Lý do: {item.rejectReason}</p>
+                            )}
+                            {item.bankReferenceNo && (
+                              <p className="text-[10px] text-slate-500 font-mono mt-0.5">Số GD: {item.bankReferenceNo}</p>
+                            )}
+                          </td>
+                          <td className="p-3 text-slate-500 text-[11px]">{item.requestedAt}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
+          </div>
+        )
+      )}
+
+      {/* TAB PROMOTIONS: QUẢN LÝ MÃ GIẢM GIÁ */}
+      {activeTab === 'promotions' && (
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <Tag className="w-5 h-5 text-[#e74c3c]" />
+                <h3 className="text-base font-bold text-slate-800">Quản lý Mã Giảm Giá & Voucher</h3>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Tạo mã khuyến mãi độc quyền để thu hút học viên đăng ký khóa học của bạn.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void loadPromotions()}
+                disabled={promotionsLoading}
+                className="px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${promotionsLoading ? 'animate-spin' : ''}`} />
+                Làm mới
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsCreatingPromo(!isCreatingPromo)}
+                className="px-4 py-2 rounded-xl bg-[#e74c3c] hover:bg-[#c0392b] text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                {isCreatingPromo ? 'Đóng biểu mẫu' : 'Tạo mã voucher mới'}
+              </button>
+            </div>
+          </div>
+
+          {promotionsError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{promotionsError}</span>
+            </div>
+          )}
+
+          {/* Form Tạo Mã Mới */}
+          {isCreatingPromo && (
+            <form onSubmit={handleCreatePromo} className="p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Thông tin mã giảm giá mới</span>
+                <span className="text-[11px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                  Sẽ tự động áp dụng cho: {currentCourse.title}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Mã code voucher <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="VD: BANMOI30, TECH50"
+                    value={promoFormCode}
+                    onChange={e => setPromoFormCode(e.target.value.toUpperCase())}
+                    className="w-full px-3 py-2 text-xs font-mono uppercase bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-[#e74c3c]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Hình thức giảm giá
+                  </label>
+                  <select
+                    value={promoDiscountType}
+                    onChange={e => setPromoDiscountType(e.target.value as any)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-[#e74c3c]"
+                  >
+                    <option value="PERCENT">Giảm theo % (Phần trăm)</option>
+                    <option value="AMOUNT">Giảm số tiền cố định (VNĐ)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    {promoDiscountType === 'PERCENT' ? 'Phần trăm giảm (%)' : 'Số tiền giảm (VNĐ)'} <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={promoDiscountType === 'PERCENT' ? 1 : 1000}
+                    max={promoDiscountType === 'PERCENT' ? 100 : undefined}
+                    step={promoDiscountType === 'PERCENT' ? 1 : 10000}
+                    value={promoDiscountValue}
+                    onChange={e => setPromoDiscountValue(e.target.value)}
+                    placeholder={promoDiscountType === 'PERCENT' ? '20' : '100000'}
+                    className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-[#e74c3c]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Giới hạn số lượt dùng (để trống = vô hạn)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={promoUsageLimit}
+                    onChange={e => setPromoUsageLimit(e.target.value)}
+                    placeholder="Không giới hạn"
+                    className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-[#e74c3c]"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Ngày hết hạn (tùy chọn)
+                  </label>
+                  <input
+                    type="date"
+                    value={promoEndDate}
+                    onChange={e => setPromoEndDate(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-[#e74c3c]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setIsCreatingPromo(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={promoSubmitting}
+                  className="px-4 py-2 text-xs font-bold bg-[#e74c3c] hover:bg-[#c0392b] text-white rounded-xl shadow-sm transition disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                >
+                  {promoSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                  {promoSubmitting ? 'Đang tạo...' : 'Lưu & Áp dụng ngay'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Danh Sách Mã Giảm Giá */}
+          {promotionsLoading ? (
+            <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-2">
+              <Loader2 className="w-6 h-6 animate-spin text-[#e74c3c]" />
+              <p className="text-xs">Đang tải danh sách voucher...</p>
+            </div>
+          ) : promotionsList.length === 0 ? (
+            <div className="py-12 text-center text-slate-400 space-y-2 border-2 border-dashed border-slate-200 rounded-2xl">
+              <Tag className="w-8 h-8 mx-auto text-slate-300" />
+              <p className="text-xs font-medium">Bạn chưa tạo mã giảm giá nào.</p>
+              <p className="text-[11px] text-slate-400">Bấm "Tạo mã voucher mới" ở góc phải để bắt đầu chiến dịch khuyến mãi.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                    <th className="p-3.5">Mã Voucher</th>
+                    <th className="p-3.5">Mức giảm</th>
+                    <th className="p-3.5">Lượt sử dụng</th>
+                    <th className="p-3.5">Hạn dùng</th>
+                    <th className="p-3.5">Áp dụng cho khóa này</th>
+                    <th className="p-3.5 text-right">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {promotionsList.map(promo => {
+                    const isAttached = (promo.appliedCourseIds || []).includes(currentCourse.id);
+                    const isLoading = promoActionLoadingId === promo.id;
+
+                    return (
+                      <tr key={promo.id} className="hover:bg-slate-50/70 transition">
+                        <td className="p-3.5 font-mono font-bold text-slate-900 flex items-center gap-2">
+                          <span className="px-2.5 py-1 bg-red-50 text-red-700 border border-red-200 rounded-lg">
+                            {promo.code}
+                          </span>
+                        </td>
+                        <td className="p-3.5 font-semibold text-emerald-600">
+                          {promo.discountPercent ? `Giảm ${promo.discountPercent}%` : formatVND(promo.discountAmount || 0)}
+                        </td>
+                        <td className="p-3.5 text-slate-700">
+                          <span className="font-bold">{promo.usageCount ?? 0}</span>
+                          <span className="text-slate-400"> / {promo.usageLimit ? promo.usageLimit : '∞'}</span>
+                        </td>
+                        <td className="p-3.5 text-slate-500">
+                          {promo.endDate ? new Date(promo.endDate).toLocaleDateString('vi-VN') : 'Vĩnh viễn'}
+                        </td>
+                        <td className="p-3.5">
+                          <button
+                            type="button"
+                            disabled={isLoading}
+                            onClick={() => void handleToggleCourseAttach(promo)}
+                            className={`px-3 py-1.5 rounded-xl font-bold text-[11px] flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50 ${
+                              isAttached
+                                ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
+                            }`}
+                          >
+                            {isLoading ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : isAttached ? (
+                              <Link2 className="w-3 h-3 text-emerald-600" />
+                            ) : (
+                              <Unlink className="w-3 h-3 text-slate-400" />
+                            )}
+                            {isAttached ? 'Đang kích hoạt' : 'Chưa gắn (Bấm để bật)'}
+                          </button>
+                        </td>
+                        <td className="p-3.5 text-right">
+                          <button
+                            type="button"
+                            disabled={isLoading}
+                            onClick={() => void handleDeletePromo(promo.id, promo.code)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer disabled:opacity-50"
+                            title="Xóa mã giảm giá"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
+
+      {/* Security Modals */}
+      <FinancialPinModal
+        isOpen={isPinModalOpen}
+        onClose={() => setIsPinModalOpen(false)}
+        onSuccess={handleFinancialUnlocked}
+        hasPin={hasPin}
+        onPinCreated={() => setHasPin(true)}
+      />
+
+      <UserSecuritySettingsModal
+        isOpen={isSecuritySettingsOpen}
+        onClose={() => setIsSecuritySettingsOpen(false)}
+        onSecurityUpdated={() => void checkFinancialStatus()}
+      />
+
+      {/* Lesson Attachments Modal (Hạng mục E) */}
+      <LessonAttachmentsModal
+        isOpen={!!attachmentModalLesson}
+        onClose={() => setAttachmentModalLesson(null)}
+        lessonId={attachmentModalLesson?.id || ''}
+        lessonTitle={attachmentModalLesson?.title || ''}
+      />
     </div>
   );
 };

@@ -5,10 +5,13 @@ import { QuizModal } from '../quiz/QuizModal';
 import { 
   ArrowLeft, Award, CheckCircle2, Circle, PlayCircle, HelpCircle, 
   ChevronDown, ChevronUp, FileText, Download, MessageSquare, Send, 
-  Sparkles, ShieldCheck, Check, Clock, BookOpen, Layers, CheckCheck, AlertCircle, Loader2
+  Sparkles, ShieldCheck, Check, Clock, BookOpen, Layers, CheckCheck, AlertCircle, Loader2,
+  Heart, Reply, Trash2, CornerDownRight, RefreshCw, User
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import enrollmentApi, { type EnrollmentDto } from '../../api/enrollmentApi';
+import commentApi, { type LessonCommentItem } from '../../api/commentApi';
+import { lessonAttachmentApi, type LessonAttachmentItem } from '../../api/lessonAttachmentApi';
 
 interface LearningRoomProps {
   course: Course;
@@ -27,9 +30,10 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
   onBack,
   onOpenCertificate
 }) => {
-  // Find initial lesson
+  // Danh sách bài học và bài kiểm tra
   const allLessons = course.sections.flatMap(s => s.lessons);
-  const totalLessonCount = allLessons.length;
+  const allQuizzes = course.sections.map(s => s.quiz).filter((q): q is Quiz => !!q);
+  const totalItemsCount = allLessons.length + allQuizzes.length;
 
   const [currentLessonId, setCurrentLessonId] = useState<string>(
     allLessons[0]?.id || ''
@@ -41,6 +45,45 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
   const [activeTab, setActiveTab] = useState<'overview' | 'resources' | 'qa'>('overview');
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
   const [passedQuizIds, setPassedQuizIds] = useState<string[]>([]);
+
+  // Q&A Comments State
+  const [comments, setComments] = useState<LessonCommentItem[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentsError, setCommentsError] = useState<string | null>(null);
+  const [newCommentText, setNewCommentText] = useState('');
+  const [replyingToId, setReplyingToId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [likingCommentId, setLikingCommentId] = useState<string | null>(null);
+
+  // Lesson Attachments / Resources State (Hạng mục E)
+  const [attachments, setAttachments] = useState<LessonAttachmentItem[]>([]);
+  const [loadingAttachments, setLoadingAttachments] = useState(false);
+  const [attachmentsError, setAttachmentsError] = useState<string | null>(null);
+
+  const loadAttachments = async (lessonId: string) => {
+    if (!lessonId) {
+      setAttachments([]);
+      return;
+    }
+    setLoadingAttachments(true);
+    setAttachmentsError(null);
+    try {
+      const data = await lessonAttachmentApi.getAttachments(lessonId);
+      setAttachments(data || []);
+    } catch (e: any) {
+      console.warn('Lỗi lấy tài liệu bài học:', e);
+      setAttachmentsError(e?.message || 'Không thể tải tài liệu đính kèm.');
+    } finally {
+      setLoadingAttachments(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentLessonId) {
+      void loadAttachments(currentLessonId);
+    }
+  }, [currentLessonId]);
 
   // Tiến độ lấy từ server; trước đây màn hình tự đánh dấu sẵn bài đầu tiên là xong
   useEffect(() => {
@@ -55,7 +98,8 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
       try {
         const progress = await enrollmentApi.getEnrollmentProgress(enrollment.id);
         if (!cancelled) {
-          setCompletedLessonIds(progress.filter(item => item.isCompleted).map(item => item.lessonId));
+          const completedFromDb = progress.filter(item => item.isCompleted).map(item => item.lessonId);
+          setCompletedLessonIds(completedFromDb);
         }
       } catch (err: any) {
         if (!cancelled) setProgressError(err?.message || 'Không tải được tiến độ học tập.');
@@ -100,18 +144,89 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
     return () => { cancelled = true; };
   }, [enrollment, course.sections]);
 
+  // Nạp danh sách câu hỏi thảo luận khi đổi bài học hoặc tab Q&A
+  const loadComments = async (lessonId: string) => {
+    if (!lessonId) return;
+    setCommentsLoading(true);
+    setCommentsError(null);
+    try {
+      const page = await commentApi.getCommentsByLesson(lessonId, { page: 0, size: 50 });
+      setComments(page.items);
+    } catch (err: any) {
+      console.warn('Không tải được thảo luận bài học:', err);
+      setCommentsError(err?.message || 'Không thể tải thảo luận bài học.');
+    } finally {
+      setCommentsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'qa' && currentLessonId) {
+      void loadComments(currentLessonId);
+    }
+  }, [activeTab, currentLessonId]);
+
+  const handlePostComment = async (e: React.FormEvent, parentId?: string | null) => {
+    e.preventDefault();
+    const content = parentId ? replyText.trim() : newCommentText.trim();
+    if (!content || !currentLessonId) return;
+
+    setSubmittingComment(true);
+    setCommentsError(null);
+    try {
+      await commentApi.createComment(course.id, currentLessonId, {
+        content,
+        parentId: parentId || undefined,
+      });
+      if (parentId) {
+        setReplyText('');
+        setReplyingToId(null);
+      } else {
+        setNewCommentText('');
+      }
+      await loadComments(currentLessonId);
+    } catch (err: any) {
+      setCommentsError(err?.message || 'Không thể gửi bình luận. Bạn cần ghi danh để thảo luận.');
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  const handleLikeComment = async (commentId: string) => {
+    setLikingCommentId(commentId);
+    try {
+      await commentApi.likeComment(commentId);
+      await loadComments(currentLessonId);
+    } catch (err) {
+      console.warn('Lỗi thích bình luận:', err);
+    } finally {
+      setLikingCommentId(null);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!confirm('Bạn có chắc muốn xóa bình luận này?')) return;
+    try {
+      await commentApi.deleteComment(commentId);
+      await loadComments(currentLessonId);
+    } catch (err: any) {
+      alert(err?.message || 'Không thể xóa bình luận.');
+    }
+  };
+
   const currentLesson = allLessons.find(l => l.id === currentLessonId) || allLessons[0];
   const currentLessonIndex = allLessons.findIndex(l => l.id === currentLessonId);
 
-  // Progress calculations
-  const completedCount = completedLessonIds.length;
-  const progressPercent = totalLessonCount > 0 
-    ? Math.min(100, Math.round((completedCount / totalLessonCount) * 100))
+  // Tính toán tiến độ bao gồm cả video bài học và bài kiểm tra Quiz
+  const completedVideoCount = allLessons.filter(l => completedLessonIds.includes(l.id)).length;
+  const completedQuizCount = allQuizzes.filter(q => passedQuizIds.includes(q.id) || completedLessonIds.includes(q.id)).length;
+  const completedCount = completedVideoCount + completedQuizCount;
+  const progressPercent = totalItemsCount > 0 
+    ? Math.min(100, Math.round((completedCount / totalItemsCount) * 100))
     : 0;
   const isAllCompleted = progressPercent === 100;
   /** Chứng chỉ chỉ mở khi đã ghi danh thật và tiến độ đã tải xong từ server */
   const canGetCertificate = isAllCompleted && !!enrollment && !progressLoading;
-
 
   /** Video xem đủ 80% hoặc kết thúc: ghi tiến độ lên server. */
   const handleLessonComplete = async (lessonId: string) => {
@@ -122,12 +237,12 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
       await enrollmentApi.updateLessonProgress(enrollment.id, lessonId, { isCompleted: true });
       const nextCompleted = [...completedLessonIds, lessonId];
       setCompletedLessonIds(nextCompleted);
-      if (nextCompleted.length === totalLessonCount) {
+
+      const nextVideoDone = allLessons.filter(l => nextCompleted.includes(l.id)).length;
+      if (nextVideoDone + completedQuizCount >= totalItemsCount) {
         triggerCompletionConfetti();
       }
     } catch (err: any) {
-      // Cố ý KHÔNG đánh dấu hoàn thành tại chỗ khi server ghi thất bại: nếu đánh
-      // dấu, người học thấy 100% nhưng tải lại trang là mất sạch.
       setProgressError(err?.message || 'Không lưu được tiến độ lên máy chủ.');
     }
   };
@@ -204,7 +319,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                 {progressPercent}%
               </span>
               <span className="text-[11px] text-slate-400 hidden md:inline">
-                ({completedCount}/{totalLessonCount} bài)
+                ({completedCount}/{totalItemsCount} bài)
               </span>
             </div>
 
@@ -335,7 +450,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                 }`}
               >
                 <FileText className="w-3.5 h-3.5" />
-                Tài liệu ({currentLesson?.resources.length || 0})
+                Tài liệu ({attachments.length})
               </button>
 
               <button
@@ -389,59 +504,331 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
               )}
 
               {activeTab === 'resources' && (
-                <div className="space-y-3">
-                  {(currentLesson?.resources.length ?? 0) === 0 ? (
-                    <div className="p-6 bg-slate-900 rounded-xl border border-dashed border-slate-700 text-center space-y-2">
-                      <FileText className="w-8 h-8 text-slate-600 mx-auto" />
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div>
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                        <FileText className="w-4 h-4 text-rose-400" />
+                        Tài liệu học tập đính kèm ({attachments.length})
+                      </h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Tải mã nguồn, slides hoặc tài liệu hướng dẫn bổ trợ cho bài học này
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => loadAttachments(currentLessonId)}
+                      disabled={loadingAttachments}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 cursor-pointer disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${loadingAttachments ? 'animate-spin text-rose-400' : ''}`} />
+                      Làm mới
+                    </button>
+                  </div>
+
+                  {loadingAttachments ? (
+                    <div className="py-10 flex flex-col items-center justify-center gap-2 text-slate-400">
+                      <Loader2 className="w-6 h-6 animate-spin text-rose-500" />
+                      <span className="text-xs">Đang tải danh sách tài liệu...</span>
+                    </div>
+                  ) : attachmentsError ? (
+                    <div className="p-4 bg-rose-950/30 border border-rose-800/40 rounded-xl text-xs text-rose-300 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                        <span>{attachmentsError}</span>
+                      </div>
+                      <button
+                        onClick={() => loadAttachments(currentLessonId)}
+                        className="px-2.5 py-1 bg-rose-900/50 hover:bg-rose-900 text-[11px] rounded border border-rose-700/60 font-semibold"
+                      >
+                        Thử lại
+                      </button>
+                    </div>
+                  ) : attachments.length === 0 ? (
+                    <div className="p-8 bg-slate-900/60 rounded-xl border border-dashed border-slate-800 text-center space-y-2">
+                      <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center mx-auto text-slate-500">
+                        <FileText className="w-5 h-5" />
+                      </div>
                       <p className="text-xs font-semibold text-slate-300">Bài học này chưa có tài liệu đính kèm</p>
-                      <p className="text-[11px] text-slate-500 leading-relaxed">
-                        Hệ thống chưa có API quản lý tài liệu cho bài học nên mục này luôn trống.
+                      <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                        Giảng viên chưa tải lên tài liệu bổ trợ nào cho bài học này. Hãy theo dõi video và thực hành theo hướng dẫn.
                       </p>
                     </div>
                   ) : (
-                    <>
-                      <p className="text-xs text-slate-400">Tài liệu đính kèm của bài học:</p>
-                      <div className="space-y-2">
-                        {currentLesson?.resources.map((res, i) => (
+                    <div className="space-y-2.5">
+                      {attachments.map((item) => {
+                        const typeBadge = (item.fileType || 'FILE').toUpperCase();
+                        const isZip = typeBadge.includes('ZIP') || typeBadge.includes('RAR');
+                        const isPdf = typeBadge.includes('PDF');
+                        const isDoc = typeBadge.includes('DOC');
+                        const isSlide = typeBadge.includes('PPT') || typeBadge.includes('SLIDE');
+
+                        return (
                           <div
-                            key={i}
-                            className="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition-colors"
+                            key={item.id}
+                            className="flex items-center justify-between p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 transition-all group"
                           >
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-lg bg-slate-800 text-indigo-400 flex items-center justify-center text-xs font-bold">
-                                {res.type}
+                            <div className="flex items-center gap-3 min-w-0 pr-3">
+                              <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
+                                isPdf ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30' :
+                                isZip ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30' :
+                                isSlide ? 'bg-orange-500/15 text-orange-400 border border-orange-500/30' :
+                                isDoc ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30' :
+                                'bg-indigo-500/15 text-indigo-400 border border-indigo-500/30'
+                              }`}>
+                                {typeBadge.substring(0, 4)}
                               </div>
-                              <div>
-                                <p className="font-semibold text-xs text-slate-200">{res.name}</p>
-                                <span className="text-[10px] text-slate-500">Dung lượng: {res.size}</span>
+                              <div className="min-w-0">
+                                <p className="font-semibold text-xs text-slate-200 truncate group-hover:text-white transition-colors">
+                                  {item.name}
+                                </p>
+                                <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-0.5">
+                                  {item.fileSize && <span>Dung lượng: {item.fileSize}</span>}
+                                  {item.createdAt && (
+                                    <span>Ngày tạo: {new Date(item.createdAt).toLocaleDateString('vi-VN')}</span>
+                                  )}
+                                </div>
                               </div>
                             </div>
 
                             <a
-                              href={res.url}
+                              href={item.fileUrl}
                               target="_blank"
                               rel="noreferrer"
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors border border-slate-700"
+                              download
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-[#e74c3c] text-slate-200 hover:text-white rounded-lg transition-all border border-slate-700 hover:border-[#e74c3c] shadow-sm shrink-0 cursor-pointer"
                             >
-                              <Download className="w-3.5 h-3.5 text-emerald-400" />
+                              <Download className="w-3.5 h-3.5" />
                               Tải về
                             </a>
                           </div>
-                        ))}
-                      </div>
-                    </>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
               )}
 
               {activeTab === 'qa' && (
-                <div className="p-6 bg-slate-900 rounded-xl border border-dashed border-slate-700 text-center space-y-2">
-                  <MessageSquare className="w-8 h-8 text-slate-600 mx-auto" />
-                  <p className="text-xs font-semibold text-slate-300">Phần hỏi đáp chưa khả dụng</p>
-                  <p className="text-[11px] text-slate-500 leading-relaxed">
-                    Hệ thống chưa có API thảo luận theo bài học, nên chưa thể hiển thị hay gửi câu hỏi.
-                    Trước đây mục này hiện một cuộc trò chuyện mẫu cho mọi khóa học.
-                  </p>
+                <div className="space-y-6">
+                  {/* Header & Refresh */}
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="w-4 h-4 text-[#e74c3c]" />
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                        Hỏi đáp & Thảo luận ({comments.reduce((acc, c) => acc + 1 + (c.replies?.length || 0), 0)})
+                      </h4>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void loadComments(currentLessonId)}
+                      disabled={commentsLoading}
+                      className="px-2.5 py-1 text-[11px] font-semibold text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-800 rounded-lg transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${commentsLoading ? 'animate-spin' : ''}`} />
+                      Làm mới
+                    </button>
+                  </div>
+
+                  {commentsError && (
+                    <div className="p-3 bg-rose-950/40 border border-rose-800/60 rounded-xl text-xs text-rose-300 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                      <span>{commentsError}</span>
+                    </div>
+                  )}
+
+                  {/* Comment Input Box */}
+                  <form onSubmit={e => void handlePostComment(e)} className="space-y-2.5">
+                    <div className="relative">
+                      <textarea
+                        rows={3}
+                        value={newCommentText}
+                        onChange={e => setNewCommentText(e.target.value)}
+                        placeholder="Đặt câu hỏi hoặc chia sẻ thắc mắc về bài học này..."
+                        className="w-full p-3.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-[#e74c3c] leading-relaxed resize-none"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-slate-500">
+                        Vui lòng giữ văn minh, lịch sự trong cộng đồng học tập.
+                      </span>
+                      <button
+                        type="submit"
+                        disabled={submittingComment || !newCommentText.trim()}
+                        className="px-4 py-2 bg-[#e74c3c] hover:bg-[#c0392b] text-white text-xs font-bold rounded-xl shadow-md transition disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                      >
+                        {submittingComment ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                        Gửi câu hỏi
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* Comments List */}
+                  {commentsLoading ? (
+                    <div className="py-12 text-center text-slate-500 flex flex-col items-center gap-2">
+                      <Loader2 className="w-6 h-6 animate-spin text-[#e74c3c]" />
+                      <span className="text-xs">Đang tải câu hỏi thảo luận...</span>
+                    </div>
+                  ) : comments.length === 0 ? (
+                    <div className="p-8 bg-slate-900/60 rounded-2xl border border-dashed border-slate-800 text-center space-y-2">
+                      <MessageSquare className="w-8 h-8 text-slate-600 mx-auto" />
+                      <p className="text-xs font-semibold text-slate-300">Chưa có câu hỏi nào cho bài học này</p>
+                      <p className="text-[11px] text-slate-500">
+                        Hãy là người đầu tiên đặt câu hỏi để nhận trợ giúp từ giảng viên và bạn học!
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {comments.map(comment => (
+                        <div key={comment.id} className="p-4 bg-slate-900/90 rounded-2xl border border-slate-800/80 space-y-3">
+                          {/* Top: Avatar, Name, Time */}
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-2.5">
+                              {comment.userAvatar ? (
+                                <img
+                                  src={comment.userAvatar}
+                                  alt={comment.userName}
+                                  className="w-8 h-8 rounded-full object-cover border border-slate-700"
+                                />
+                              ) : (
+                                <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 font-bold text-xs">
+                                  {comment.userName?.charAt(0)?.toUpperCase() || 'U'}
+                                </div>
+                              )}
+                              <div>
+                                <h5 className="text-xs font-bold text-white">{comment.userName}</h5>
+                                <span className="text-[10px] text-slate-500">
+                                  {comment.createdAt ? new Date(comment.createdAt).toLocaleString('vi-VN') : 'Vừa xong'}
+                                </span>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteComment(comment.id)}
+                              className="text-slate-600 hover:text-rose-400 transition p-1"
+                              title="Xóa bình luận"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          {/* Content */}
+                          <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line pl-10">
+                            {comment.content}
+                          </p>
+
+                          {/* Actions: Like & Reply */}
+                          <div className="flex items-center gap-4 pl-10 pt-1 text-xs text-slate-400">
+                            <button
+                              type="button"
+                              onClick={() => void handleLikeComment(comment.id)}
+                              className="flex items-center gap-1.5 hover:text-rose-400 transition cursor-pointer"
+                            >
+                              <Heart className={`w-3.5 h-3.5 ${comment.likesCount > 0 ? 'fill-rose-500 text-rose-500' : ''}`} />
+                              <span>{comment.likesCount || 0}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReplyingToId(replyingToId === comment.id ? null : comment.id);
+                                setReplyText('');
+                              }}
+                              className="flex items-center gap-1 hover:text-indigo-400 transition cursor-pointer"
+                            >
+                              <Reply className="w-3.5 h-3.5" />
+                              <span>Trả lời</span>
+                            </button>
+                          </div>
+
+                          {/* Reply Form */}
+                          {replyingToId === comment.id && (
+                            <form onSubmit={e => void handlePostComment(e, comment.id)} className="pl-10 pt-2 space-y-2">
+                              <div className="relative">
+                                <textarea
+                                  rows={2}
+                                  value={replyText}
+                                  onChange={e => setReplyText(e.target.value)}
+                                  placeholder={`Trả lời @${comment.userName}...`}
+                                  className="w-full p-2.5 bg-slate-950 border border-indigo-900/60 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                                />
+                              </div>
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setReplyingToId(null)}
+                                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+                                >
+                                  Hủy
+                                </button>
+                                <button
+                                  type="submit"
+                                  disabled={submittingComment || !replyText.trim()}
+                                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg transition disabled:opacity-50"
+                                >
+                                  {submittingComment ? 'Đang gửi...' : 'Gửi trả lời'}
+                                </button>
+                              </div>
+                            </form>
+                          )}
+
+                          {/* Nested Replies List */}
+                          {comment.replies && comment.replies.length > 0 && (
+                            <div className="pl-8 pt-2 space-y-2.5 border-l-2 border-slate-800 ml-4">
+                              {comment.replies.map(reply => (
+                                <div key={reply.id} className="p-3 bg-slate-950/60 rounded-xl border border-slate-800/60 space-y-2">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <CornerDownRight className="w-3 h-3 text-slate-600 shrink-0" />
+                                      {reply.userAvatar ? (
+                                        <img
+                                          src={reply.userAvatar}
+                                          alt={reply.userName}
+                                          className="w-6 h-6 rounded-full object-cover border border-slate-700"
+                                        />
+                                      ) : (
+                                        <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 font-bold text-[10px]">
+                                          {reply.userName?.charAt(0)?.toUpperCase() || 'U'}
+                                        </div>
+                                      )}
+                                      <span className="text-xs font-bold text-indigo-300">{reply.userName}</span>
+                                      <span className="text-[10px] text-slate-500">
+                                        {reply.createdAt ? new Date(reply.createdAt).toLocaleDateString('vi-VN') : ''}
+                                      </span>
+                                    </div>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleDeleteComment(reply.id)}
+                                      className="text-slate-600 hover:text-rose-400 transition p-1"
+                                      title="Xóa phản hồi"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+
+                                  <p className="text-xs text-slate-300 leading-relaxed pl-5 whitespace-pre-line">
+                                    {reply.content}
+                                  </p>
+
+                                  <div className="pl-5 pt-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleLikeComment(reply.id)}
+                                      className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-rose-400 transition cursor-pointer"
+                                    >
+                                      <Heart className={`w-3 h-3 ${reply.likesCount > 0 ? 'fill-rose-500 text-rose-500' : ''}`} />
+                                      <span>{reply.likesCount || 0}</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -458,7 +845,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                 <h3 className="font-bold text-sm text-white">CHƯƠNG MỤC KHÓA HỌC</h3>
               </div>
               <span className="text-[11px] font-mono text-emerald-400 font-bold">
-                {completedCount}/{totalLessonCount} Đạt
+                {completedCount}/{totalItemsCount} Đạt
               </span>
             </div>
 
@@ -622,8 +1009,15 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
           enrollmentId={enrollment?.id ?? null}
           onClose={() => setActiveQuiz(null)}
           onQuizPassed={() => {
-            // Điểm do server chấm; ở đây chỉ ghi nhận để đổi trạng thái hiển thị
-            setPassedQuizIds(prev => prev.includes(activeQuiz.id) ? prev : [...prev, activeQuiz.id]);
+            const nextPassed = Array.from(new Set([...passedQuizIds, activeQuiz.id]));
+            setPassedQuizIds(nextPassed);
+            setCompletedLessonIds(prev => Array.from(new Set([...prev, activeQuiz.id])));
+
+            const nextTotalDone = allLessons.filter(l => completedLessonIds.includes(l.id)).length +
+              allQuizzes.filter(q => nextPassed.includes(q.id) || completedLessonIds.includes(q.id)).length;
+            if (nextTotalDone >= totalItemsCount) {
+              triggerCompletionConfetti();
+            }
           }}
         />
       )}

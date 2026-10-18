@@ -111,24 +111,51 @@ export interface NotificationItem {
 
 export interface DeviceSession {
   deviceId: string;
+  deviceFingerprint?: string;
   deviceName: string;
-  ipAddress: string;
-  browser: string;
-  os: string;
+  userId?: string;
+  userEmail?: string;
+  userFullName?: string;
+  ipAddress?: string;
+  browser?: string;
+  os?: string;
   lastActive: string;
+  loginAt?: string;
   isCurrent: boolean;
+  isBlocked?: boolean;
 }
 
 export interface PayoutRequest {
   id: string;
   instructorId: string;
-  instructorName: string;
+  instructorName?: string;
   amount: number;
+  currencyCode?: string;
   bankName: string;
   bankAccount: string;
   bankOwner: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING' | 'APPROVED' | 'SUCCESS' | 'REJECTED';
   requestedAt: string;
+  processedAt?: string;
+  rejectReason?: string;
+  bankReferenceNo?: string;
+}
+
+export interface InstructorWalletBalance {
+  actualBalance: number;
+  availableBalance: number;
+  blockedBalance: number;
+  pendingBalance: number;
+}
+
+export interface InstructorBankAccount {
+  id: string;
+  instructorId: string;
+  bankCode: string;
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  isPrimary: boolean;
 }
 
 export interface ReviewItem {
@@ -138,6 +165,22 @@ export interface ReviewItem {
   rating: number;
   date: string;
   comment: string;
+}
+
+export interface RatingSummary {
+  courseId: string;
+  averageRating: number;
+  totalReviews: number;
+  starDistribution: Record<number, number>;
+}
+
+export interface QuizQuestionResult {
+  questionId: string;
+  questionText: string;
+  selectedAnswerId?: string | null;
+  correctAnswerIds: string[];
+  isCorrect: boolean;
+  explanation: string;
 }
 
 export interface VNPayPaymentResult {
@@ -153,4 +196,81 @@ export interface VNPayPaymentResult {
   message: string;
 }
 
+export interface OrderItem {
+  id: string;
+  courseId: string;
+  courseName: string;
+  instructorId: string;
+  originalPrice: number;
+  discountAmount: number;
+  finalPrice: number;
+}
+
+export interface OrderSummary {
+  id: string;
+  totalPrice: number;
+  currencyCode: string;
+  status: 'PENDING' | 'CANCELLED' | 'PAID' | 'REFUND_REQUESTED' | 'REFUNDED' | 'DELETED';
+  createdAt: string;
+  rawCreatedAt?: string;
+  items: OrderItem[];
+}
+
+export interface RefundRequestItem {
+  courseId: string;
+  courseName: string;
+  instructorId: string;
+  finalPrice: number;
+}
+
+export interface RefundRequest {
+  id: string;
+  orderId: string;
+  learnerId: string;
+  amount: number;
+  currencyCode: string;
+  reason: string;
+  detail?: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  adminNote?: string;
+  resolvedBy?: string;
+  resolvedAt?: string;
+  createdAt: string;
+  orderCreatedAt?: string;
+  items?: RefundRequestItem[];
+}
+
+export interface InstructorAnalyticsOverview {
+  totalStudents: number;
+  totalCourses: number;
+  thisMonthRevenue: number;
+  lastMonthRevenue: number;
+  growthRate: number;
+  thisMonthSales: number;
+  availableBalance: number;
+  pendingBalance: number;
+  actualBalance: number;
+  allTimeRevenue: number;
+}
+
+export interface RevenueChartPoint {
+  period: string;
+  label: string;
+  revenue: number;
+  grossSales: number;
+  orderCount: number;
+}
+
+export interface CourseRevenueBreakdown {
+  courseId: string;
+  courseTitle: string;
+  basePrice: number;
+  grossRevenue: number;
+  netRevenue: number;
+  platformFee: number;
+  commissionRate: number;
+  salesCount: number;
+}
+
 export * from './types/auth';
+

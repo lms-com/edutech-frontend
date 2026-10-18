@@ -200,7 +200,7 @@ export const mapQuestions = (dtos: QuestionResponseDto[]): QuizQuestion[] =>
 const mapQuiz = (dto: LessonResponseDto, questions: QuizQuestion[]): Quiz => ({
   id: dto.id,
   title: dto.title,
-  durationMinutes: 0,
+  durationMinutes: dto.duration && dto.duration > 0 ? Math.max(1, Math.round(dto.duration / 60)) : 15,
   passScore: Number(dto.passScore ?? 80),
   questions,
 });
@@ -255,6 +255,36 @@ export const mapReview = (dto: ReviewResponseDto): ReviewItem => ({
   date: formatDate(dto.createdAt),
   comment: dto.comment ?? '',
 });
+
+export interface RatingSummaryResponseDto {
+  courseId?: string;
+  averageRating?: number;
+  totalReviews?: number;
+  starDistribution?: Record<string, number>;
+}
+
+export const mapRatingSummary = (dto: RatingSummaryResponseDto, fallbackCourseId = ''): {
+  courseId: string;
+  averageRating: number;
+  totalReviews: number;
+  starDistribution: Record<number, number>;
+} => {
+  const dist: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+  if (dto.starDistribution) {
+    for (const [k, v] of Object.entries(dto.starDistribution)) {
+      const star = Number(k);
+      if (star >= 1 && star <= 5) {
+        dist[star] = Number(v ?? 0);
+      }
+    }
+  }
+  return {
+    courseId: dto.courseId ?? fallbackCourseId,
+    averageRating: Number(dto.averageRating ?? 0),
+    totalReviews: Number(dto.totalReviews ?? 0),
+    starDistribution: dist,
+  };
+};
 
 /** Điểm trung bình và số lượt đánh giá, tính từ danh sách đánh giá thật. */
 export const summarizeReviews = (reviews: ReviewItem[]): { rating: number; reviewsCount: number } => {

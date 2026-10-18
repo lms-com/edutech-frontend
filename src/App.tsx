@@ -14,6 +14,7 @@ import { InstructorCourseManager } from './components/instructor/InstructorCours
 import { AdminPortal } from './components/admin/AdminPortal';
 import { AuthModal } from './components/auth/AuthModal';
 import { PaymentResultView } from './components/payment/PaymentResultView';
+import { OrderHistoryModal } from './components/payment/OrderHistoryModal';
 import { parseVNPayCallback, cleanUrlQueryParams } from './utils/vnpayHelper';
 import { canAccessPortal } from './utils/roles';
 import { getPendingPurchase, clearPendingPurchase } from './utils/pendingPurchase';
@@ -23,7 +24,7 @@ import courseApi from './api/courseApi';
 import notificationApi from './api/notificationApi';
 import { mapCertificate } from './api/mappers/notificationMapper';
 import enrollmentApi, { type EnrollmentDto } from './api/enrollmentApi';
-import { Loader2, AlertCircle, Award } from 'lucide-react';
+import { Loader2, AlertCircle, Award, Bell, X } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export default function App() {
@@ -45,10 +46,12 @@ export default function App() {
   const [isInLearningRoom, setIsInLearningRoom] = useState<boolean>(false);
   const [isLearningPreview, setIsLearningPreview] = useState(false);
   const [showCertificateModal, setShowCertificateModal] = useState<boolean>(false);
+  const [showOrderHistoryModal, setShowOrderHistoryModal] = useState<boolean>(false);
   const [publicVerifyHash, setPublicVerifyHash] = useState<string>('');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
+  const [activeNotificationToast, setActiveNotificationToast] = useState<NotificationItem | null>(null);
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   /** Chứng chỉ đang xem trước, chọn từ trang xác thực công khai. */
   const [certificateForPreview, setCertificateForPreview] = useState<Certificate | null>(null);
@@ -147,12 +150,23 @@ export default function App() {
     return detail;
   }, [courseCache]);
 
-  const openCourseDetail = async (course: Course) => {
-    setDetailCourse(course);
+  const openCourseDetail = async (courseOrId: Course | string) => {
     setDetailError(null);
     setDetailLoading(true);
     try {
-      setDetailCourse(await ensureCourseDetail(course));
+      if (typeof courseOrId === 'string') {
+        const cached = courseCache[courseOrId];
+        if (cached) {
+          setDetailCourse(cached);
+        } else {
+          const detail = await courseApi.getCourseById(courseOrId);
+          setCourseCache(prev => ({ ...prev, [detail.id]: detail }));
+          setDetailCourse(detail);
+        }
+      } else {
+        setDetailCourse(courseOrId);
+        setDetailCourse(await ensureCourseDetail(courseOrId));
+      }
     } catch (err: any) {
       // API chi tiết khóa học yêu cầu đăng nhập, nên 401 là trường hợp hay gặp nhất
       setDetailError(err?.code === 401
@@ -161,6 +175,27 @@ export default function App() {
     } finally {
       setDetailLoading(false);
     }
+  };
+
+  const pollEnrollmentActive = async (
+    courseId: string,
+    maxRetries = 5,
+    delayMs = 800
+  ): Promise<EnrollmentDto | null> => {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const enrollment = await enrollmentApi.findMyEnrollmentForCourse(courseId);
+        if (enrollment && enrollment.status?.toUpperCase() === 'ACTIVE') {
+          return enrollment;
+        }
+      } catch (err) {
+        console.warn(`Lần thử ${i + 1}/${maxRetries} kiểm tra quyền học:`, err);
+      }
+      if (i < maxRetries - 1) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+    return null;
   };
 
   const enterLearningRoom = async (course: Course, options: { preview?: boolean } = {}): Promise<boolean> => {
@@ -172,14 +207,12 @@ export default function App() {
       // Chỉ enrollment ACTIVE mới được vào học; preview của staff là chế độ chỉ xem.
       let enrollment: EnrollmentDto | null = null;
       if (!options.preview) {
-        enrollment = await enrollmentApi.findMyEnrollmentForCourse(course.id);
-        if (enrollment?.status?.toUpperCase() !== 'ACTIVE') {
+        enrollment = await pollEnrollmentActive(course.id);
+        if (!enrollment || enrollment.status?.toUpperCase() !== 'ACTIVE') {
           setCoursesError('Khóa học chưa được kích hoạt. Hãy hoàn tất thanh toán và chờ hệ thống ghi danh thành công.');
           return false;
         }
-        if (enrollment) {
-          setMyEnrollments(prev => [enrollment!, ...prev.filter(item => item.courseId !== course.id)]);
-        }
+        setMyEnrollments(prev => [enrollment!, ...prev.filter(item => item.courseId !== course.id)]);
       }
       // Chỉ tải cấu trúc chương/bài sau khi xác minh quyền học.
       setActiveCourse(await ensureCourseDetail(course));
@@ -257,68 +290,83 @@ export default function App() {
     void loadNotifications();
   }, [loadNotifications, isAuthenticated]);
 
+  // Tự động đóng toast thông báo sau 6 giây
+  useEffect(() => {
+    if (!activeNotificationToast) return;
+    const timer = setTimeout(() => {
+      setActiveNotificationToast(null);
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, [activeNotificationToast]);
+
   /**
    * 3. Luồng SSE realtime.
-   * EventSource không gửi được header Authorization nên backend nhận định danh qua
-   * query param userId — trước đây gửi token nên luôn bị 400 và chuông không cập nhật.
+   * EventSource nhận định danh qua query param userId.
+   * Lắng nghe cả event mặc định lẫn custom event "NEW_NOTIFICATION" từ backend SseEmitterService.
    */
   useEffect(() => {
     if (!currentUser?.id) return;
 
     const eventSource = new EventSource(notificationApi.getSseUrl(currentUser.id));
 
-    eventSource.onmessage = (event) => {
+    const handleNewNotification = (event: MessageEvent) => {
       try {
-        const data = JSON.parse(event.data);
-        // Sự kiện INIT chỉ là mở kết nối, không phải thông báo mới
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        // Sự kiện INIT chỉ là mở kết nối mồi, không phải thông báo mới
         if (!data?.title) return;
-        setNotifications(prev => [
-          {
-            id: data.id ?? `sse_${Date.now()}`,
-            title: data.title,
-            message: data.content ?? '',
-            type: data.type ?? '',
-            timestamp: 'Vừa xong',
-            isRead: false,
-          },
-          ...prev,
-        ]);
+        const newNotif: NotificationItem = {
+          id: data.id ?? `sse_${Date.now()}`,
+          title: data.title,
+          message: data.content ?? data.message ?? '',
+          type: data.type ?? '',
+          timestamp: 'Vừa xong',
+          isRead: false,
+        };
+        setNotifications(prev => [newNotif, ...prev]);
+        setActiveNotificationToast(newNotif);
       } catch {
         // Bỏ qua sự kiện không parse được
       }
     };
+
+    eventSource.onmessage = handleNewNotification;
+    eventSource.addEventListener('NEW_NOTIFICATION', handleNewNotification);
 
     eventSource.onerror = () => {
       // EventSource tự thử kết nối lại; chỉ ghi log để không làm phiền người dùng
       console.warn('Luồng thông báo realtime gián đoạn, đang thử kết nối lại...');
     };
 
-    return () => eventSource.close();
+    return () => {
+      eventSource.removeEventListener('NEW_NOTIFICATION', handleNewNotification);
+      eventSource.close();
+    };
   }, [currentUser?.id]);
 
   // 4. Chứng chỉ của tôi (cần đăng nhập)
-  useEffect(() => {
+  const loadCertificates = useCallback(async (): Promise<Certificate[]> => {
     if (!isAuthenticated) {
       setCertificates([]);
-      return;
+      return [];
     }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const list = await notificationApi.getMyCertificates();
-        if (cancelled) return;
-        // Tên khóa học không có trong payload chứng chỉ nên bù từ danh sách đã tải
-        setCertificates(list.map(dto => mapCertificate(dto, {
-          courseTitle: coursesList.find(course => course.id === dto.courseId)?.title,
-          studentName: currentUser?.fullName,
-          studentEmail: currentUser?.email,
-        })));
-      } catch (err) {
-        if (!cancelled) console.warn('Không tải được chứng chỉ:', err);
-      }
-    })();
-    return () => { cancelled = true; };
+    try {
+      const list = await notificationApi.getMyCertificates();
+      const mapped = list.map(dto => mapCertificate(dto, {
+        courseTitle: coursesList.find(course => course.id === dto.courseId)?.title,
+        studentName: currentUser?.fullName,
+        studentEmail: currentUser?.email,
+      }));
+      setCertificates(mapped);
+      return mapped;
+    } catch (err) {
+      console.warn('Không tải được chứng chỉ:', err);
+      return [];
+    }
   }, [isAuthenticated, coursesList, currentUser?.fullName, currentUser?.email]);
+
+  useEffect(() => {
+    void loadCertificates();
+  }, [loadCertificates]);
 
   // 3. Tự động phát hiện và xử lý kết quả thanh toán từ VNPay Callback URL
   useEffect(() => {
@@ -327,6 +375,10 @@ export default function App() {
       if (result) {
         setPaymentResult(result);
         cleanUrlQueryParams();
+
+        if (result.isSuccess) {
+          void loadMyEnrollments();
+        }
 
         // Tự động đẩy thông báo vào Notification Dropdown
         const newNotif: NotificationItem = {
@@ -340,7 +392,7 @@ export default function App() {
         setNotifications((prev) => [newNotif, ...prev]);
       }
     }
-  }, []);
+  }, [loadMyEnrollments]);
 
   /**
    * Điểm vào cho link QR trên chứng chỉ: /?verify=<qrCodeHash>
@@ -380,11 +432,18 @@ export default function App() {
 
   const certificateToShow = certificateForPreview ?? activeCertificate;
 
-  const handleOpenCertificate = () => {
+  const handleOpenCertificate = async () => {
     // Mở từ header thì bỏ chứng chỉ đang xem trước, quay về chứng chỉ của chính mình
     setCertificateForPreview(null);
     setShowCertificateModal(true);
-    if (activeCertificate) {
+
+    let cert = activeCertificate;
+    if (!cert && isAuthenticated && activeCourse) {
+      const refreshed = await loadCertificates();
+      cert = refreshed.find(c => c.courseId === activeCourse.id) ?? refreshed[0] ?? null;
+    }
+
+    if (cert) {
       try {
         confetti({ particleCount: 70, spread: 60, origin: { y: 0.4 } });
       } catch {
@@ -468,11 +527,18 @@ export default function App() {
     onMarkAllAsRead: handleMarkAllAsRead,
     onMarkAsRead: handleMarkAsRead,
     onSelectNotification: (item: NotificationItem) => {
-      if (item.type === 'CERTIFICATE') {
+      if (item.type === 'CERTIFICATE' || item.type === 'COURSE_COMPLETED') {
         handleOpenCertificate();
+      } else if (item.type === 'ORDER_COMPLETED') {
+        setShowOrderHistoryModal(true);
+      } else if (item.type === 'COURSE_APPROVED' || item.type === 'COURSE_REJECTED' || item.type === 'PAYOUT_APPROVED' || item.type === 'PAYOUT_REJECTED') {
+        if (canAccessPortal(currentUser?.roles || [], 'instructor')) {
+          handleSelectPortal('instructor');
+        }
       }
     },
     onOpenAuthModal: () => setIsAuthModalOpen(true),
+    onOpenOrderHistory: () => setShowOrderHistoryModal(true),
   };
 
   return (
@@ -512,10 +578,24 @@ export default function App() {
             <PaymentResultView
               result={paymentResult}
               courseTitle={paymentCourse?.title || 'Khóa học'}
-              courseId={paymentCourse?.id || ''}
-              onStartLearning={async () => {
-                if (paymentCourse) {
-                  const entered = await enterLearningRoom(paymentCourse);
+              courseId={paymentCourse?.id || getPendingPurchase() || ''}
+              onStartLearning={async (courseId?: string) => {
+                let courseToEnter = paymentCourse;
+                if (!courseToEnter) {
+                  const targetId = courseId || getPendingPurchase();
+                  if (targetId) {
+                    courseToEnter = coursesList.find(c => c.id === targetId) || null;
+                    if (!courseToEnter) {
+                      try {
+                        courseToEnter = await courseApi.getCourseById(targetId);
+                      } catch (err) {
+                        console.warn('Không tải được thông tin khóa học:', err);
+                      }
+                    }
+                  }
+                }
+                if (courseToEnter) {
+                  const entered = await enterLearningRoom(courseToEnter);
                   if (entered) {
                     clearPendingPurchase();
                     setPaymentResult(null);
@@ -533,6 +613,7 @@ export default function App() {
                 setPaymentCourse(null);
                 setDetailCourse(null);
                 clearPendingPurchase();
+                void loadMyEnrollments();
               }}
             />
           ) : detailCourse ? (
@@ -614,6 +695,56 @@ export default function App() {
           if (targetPortal) handleSelectPortal(targetPortal);
         }}
       />
+
+      {/* Modal Lịch sử đơn hàng của học viên */}
+      <OrderHistoryModal
+        isOpen={showOrderHistoryModal}
+        onClose={() => setShowOrderHistoryModal(false)}
+        onSelectCourse={(courseId) => {
+          setShowOrderHistoryModal(false);
+          openCourseDetail(courseId);
+        }}
+      />
+
+      {/* Floating Real-time Notification Toast Alert */}
+      {activeNotificationToast && (
+        <div className="fixed top-20 right-5 z-60 max-w-sm w-full bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200/90 p-4 animate-in slide-in-from-right duration-300">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+              <Bell className="w-4 h-4 text-[#e74c3c]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Thông báo mới</span>
+                <button
+                  type="button"
+                  onClick={() => setActiveNotificationToast(null)}
+                  className="text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <h4 className="text-xs font-bold text-slate-900 mt-0.5 line-clamp-1">{activeNotificationToast.title}</h4>
+              <p className="text-[11px] text-slate-600 mt-1 line-clamp-2 leading-relaxed">
+                {activeNotificationToast.message}
+              </p>
+              <div className="mt-2.5 flex items-center justify-between pt-2 border-t border-slate-100">
+                <span className="text-[10px] text-slate-400">Vừa xong</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    sharedHeaderProps.onSelectNotification(activeNotificationToast);
+                    setActiveNotificationToast(null);
+                  }}
+                  className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                >
+                  Xem chi tiết →
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

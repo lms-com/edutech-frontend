@@ -3,7 +3,7 @@ import type { Certificate } from '../../types';
 import notificationApi from '../../api/notificationApi';
 import {
   ShieldCheck, CheckCircle2, FileText, Download, ArrowLeft, Calendar, Award,
-  Hash, Lock, AlertCircle, Loader2, SearchX,
+  Hash, Lock, AlertCircle, Loader2, SearchX, Search,
 } from 'lucide-react';
 
 interface PublicVerifyViewProps {
@@ -12,20 +12,29 @@ interface PublicVerifyViewProps {
   onOpenCertificatePreview: (certificate: Certificate) => void;
 }
 
-type VerifyState = 'loading' | 'valid' | 'invalid' | 'error';
+type VerifyState = 'idle' | 'loading' | 'valid' | 'invalid' | 'error';
 
 export const PublicVerifyView: React.FC<PublicVerifyViewProps> = ({
   hash,
   onBackToApp,
   onOpenCertificatePreview
 }) => {
-  const [state, setState] = useState<VerifyState>('loading');
+  const [inputHash, setInputHash] = useState<string>(hash || '');
+  const [activeHash, setActiveHash] = useState<string>(hash || '');
+  const [state, setState] = useState<VerifyState>(hash ? 'loading' : 'idle');
   const [certificate, setCertificate] = useState<Certificate | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!hash) {
-      setState('invalid');
+    setInputHash(hash || '');
+    setActiveHash(hash || '');
+  }, [hash]);
+
+  useEffect(() => {
+    const trimmed = activeHash.trim();
+    if (!trimmed) {
+      setState('idle');
+      setCertificate(null);
       return;
     }
     let cancelled = false;
@@ -33,7 +42,7 @@ export const PublicVerifyView: React.FC<PublicVerifyViewProps> = ({
       setState('loading');
       setErrorMessage(null);
       try {
-        const found = await notificationApi.verifyCertificate(hash);
+        const found = await notificationApi.verifyCertificate(trimmed);
         if (!cancelled) {
           setCertificate(found);
           setState('valid');
@@ -41,7 +50,7 @@ export const PublicVerifyView: React.FC<PublicVerifyViewProps> = ({
       } catch (err: any) {
         if (cancelled) return;
         // 404 nghĩa là không có chứng chỉ ứng với mã băm này
-        if (err?.code === 404 || err?.code === 400) {
+        if (err?.code === 404 || err?.code === 400 || err?.status === 404 || err?.status === 400) {
           setState('invalid');
         } else {
           setState('error');
@@ -51,7 +60,14 @@ export const PublicVerifyView: React.FC<PublicVerifyViewProps> = ({
     };
     void verify();
     return () => { cancelled = true; };
-  }, [hash]);
+  }, [activeHash]);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = inputHash.trim();
+    if (!trimmed) return;
+    setActiveHash(trimmed);
+  };
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col">
@@ -77,8 +93,59 @@ export const PublicVerifyView: React.FC<PublicVerifyViewProps> = ({
         </div>
       </header>
 
-      <main className="flex-1 max-w-4xl w-full mx-auto p-4 md:p-8 flex flex-col justify-center">
+      <main className="flex-1 max-w-4xl w-full mx-auto p-4 md:p-8 flex flex-col justify-center space-y-6">
+        {/* Search Box */}
+        <div className="bg-white rounded-2xl shadow-md border border-slate-200 p-5 md:p-6 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h2 className="text-sm font-bold text-[#2c3e50] flex items-center gap-2">
+              <Search className="w-4 h-4 text-[#e74c3c]" />
+              Tra cứu & Xác thực Chứng chỉ Số
+            </h2>
+            <button
+              type="button"
+              onClick={() => {
+                setInputHash('kiemthu-nodejs-2026');
+                setActiveHash('kiemthu-nodejs-2026');
+              }}
+              className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer"
+            >
+              Thử mã mẫu: kiemthu-nodejs-2026
+            </button>
+          </div>
+          <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-2.5">
+            <input
+              type="text"
+              value={inputHash}
+              onChange={e => setInputHash(e.target.value)}
+              placeholder="Nhập mã băm xác thực (qrCodeHash) trên chứng chỉ..."
+              className="flex-1 px-4 py-2.5 text-xs md:text-sm rounded-xl border border-slate-300 focus:outline-none focus:border-[#2c3e50] font-mono"
+            />
+            <button
+              type="submit"
+              disabled={!inputHash.trim() || state === 'loading'}
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#2c3e50] hover:bg-[#1a252f] text-white text-xs md:text-sm font-bold transition-colors disabled:opacity-50 cursor-pointer"
+            >
+              <Search className="w-4 h-4" />
+              Tra cứu ngay
+            </button>
+          </form>
+        </div>
+
         <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+          {state === 'idle' && (
+            <div className="p-10 text-center space-y-3">
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-slate-100 flex items-center justify-center">
+                <ShieldCheck className="w-8 h-8 text-[#2c3e50]" />
+              </div>
+              <h1 className="text-lg font-bold text-[#2c3e50]">
+                Nhập mã xác thực để kiểm tra tính hợp lệ của chứng chỉ
+              </h1>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                Mỗi chứng chỉ tốt nghiệp tại EduTech LMS đều đi kèm một mã băm định danh duy nhất (qrCodeHash). Hãy nhập mã hoặc quét QR trên bằng cấp để đối soát trực tiếp.
+              </p>
+            </div>
+          )}
+
           {state === 'loading' && (
             <div className="p-12 flex flex-col items-center gap-3 text-slate-500">
               <Loader2 className="w-8 h-8 animate-spin" />
@@ -95,7 +162,7 @@ export const PublicVerifyView: React.FC<PublicVerifyViewProps> = ({
                 KHÔNG TÌM THẤY CHỨNG CHỈ HỢP LỆ
               </h1>
               <p className="text-sm text-slate-600">
-                Mã băm <span className="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded">{hash || '(trống)'}</span> không
+                Mã băm <span className="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded">{activeHash || '(trống)'}</span> không
                 ứng với chứng chỉ nào do hệ thống cấp phát.
               </p>
               <p className="text-xs text-slate-500">

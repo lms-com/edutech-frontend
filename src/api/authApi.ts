@@ -1,4 +1,4 @@
-﻿import axiosClient from './axiosClient';
+import axiosClient from './axiosClient';
 import { getDeviceFingerprint } from '../utils/fingerprint';
 import type {
   ApiResponse,
@@ -7,6 +7,11 @@ import type {
   RegisterRequest,
   RegisterResponse,
   UserProfileResponse,
+  ForgotPasswordRequest,
+  VerifyOtpRequest,
+  ResetPasswordRequest,
+  RegisterInitRequest,
+  RegisterConfirmRequest,
 } from '../types/auth';
 
 export const authApi = {
@@ -23,12 +28,46 @@ export const authApi = {
     return axiosClient.post('/iam-service/api/v1/auth/register', data);
   },
 
+  registerInit: async (data: RegisterInitRequest): Promise<ApiResponse<string>> => {
+    return axiosClient.post('/iam-service/api/v1/auth/register-otp', data);
+  },
+
+  registerConfirm: async (data: Omit<RegisterConfirmRequest, 'deviceFingerPrint'>): Promise<ApiResponse<LoginResponse>> => {
+    const deviceFingerPrint = await getDeviceFingerprint();
+    const payload: RegisterConfirmRequest = {
+      ...data,
+      deviceFingerPrint,
+    };
+    return axiosClient.post('/iam-service/api/v1/auth/verify-register-otp', payload);
+  },
+
+  loginWithGoogle: async (idToken: string, password?: string): Promise<ApiResponse<LoginResponse>> => {
+    const deviceFingerPrint = (await getDeviceFingerprint()) || 'browser-device';
+    return axiosClient.post('/iam-service/api/v1/auth/google', {
+      idToken,
+      deviceFingerPrint,
+      ...(password ? { password } : {}),
+    });
+  },
+
   getProfile: async (): Promise<ApiResponse<UserProfileResponse>> => {
     return axiosClient.get('/iam-service/api/v1/user/me');
   },
 
   logout: async (): Promise<ApiResponse<void>> => {
-    const deviceFingerPrint = await getDeviceFingerprint();
+    const deviceFingerPrint = (await getDeviceFingerprint()) || 'browser-device';
     return axiosClient.post('/iam-service/api/v1/auth/logout', { deviceFingerPrint });
+  },
+
+  forgotPassword: async (data: ForgotPasswordRequest): Promise<ApiResponse<string>> => {
+    return axiosClient.post('/iam-service/api/v1/auth/forgot-password', data);
+  },
+
+  verifyOtp: async (data: VerifyOtpRequest): Promise<ApiResponse<string>> => {
+    return axiosClient.post('/iam-service/api/v1/auth/verify-otp', data);
+  },
+
+  resetPassword: async (data: ResetPasswordRequest): Promise<ApiResponse<string>> => {
+    return axiosClient.post('/iam-service/api/v1/auth/reset-password', data);
   },
 };

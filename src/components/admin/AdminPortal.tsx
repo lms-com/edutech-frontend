@@ -1,14 +1,23 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import type { Course, PayoutRequest, DeviceSession, Certificate } from '../../types';
-import { MOCK_PAYOUTS, MOCK_DEVICES } from '../../data/mockData';
+import type { Course, PayoutRequest, DeviceSession, Certificate, RefundRequest } from '../../types';
+import orderApi from '../../api/orderApi';
+import axiosClient from '../../api/axiosClient';
 import courseApi from '../../api/courseApi';
 import notificationApi from '../../api/notificationApi';
+import deviceApi from '../../api/deviceApi';
+import payoutApi from '../../api/payoutApi';
+import instructorApplicationApi, { type InstructorApplicationDto } from '../../api/instructorApplicationApi';
+import { securityApi } from '../../api/securityApi';
+import { FinancialPinModal } from '../security/FinancialPinModal';
+import { UserSecuritySettingsModal } from '../security/UserSecuritySettingsModal';
+import { getDeviceFingerprint } from '../../utils/fingerprint';
 import { formatVND } from '../../utils/format';
 import { 
   Shield, 
   CheckCircle, 
   XCircle, 
   AlertTriangle, 
+  AlertCircle,
   Smartphone, 
   Laptop, 
   LogOut, 
@@ -30,7 +39,12 @@ import {
   FileCheck2,
   BookOpen,
   CheckCircle2,
-  Lock
+  Lock,
+  KeyRound,
+  ShieldAlert,
+  Video,
+  RotateCcw,
+  Clock,
 } from 'lucide-react';
 
 interface AdminPortalProps {
@@ -39,13 +53,41 @@ interface AdminPortalProps {
 }
 
 export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBackToLearner }) => {
-  const [activeTab, setActiveTab] = useState<'courses' | 'certificates' | 'payouts' | 'devices'>('courses');
+  const [activeTab, setActiveTab] = useState<'courses' | 'instructors' | 'certificates' | 'payouts' | 'devices' | 'refunds'>('courses');
   const [coursesList, setCoursesList] = useState<Course[]>([]);
   const [coursesLoading, setCoursesLoading] = useState(true);
   const [coursesError, setCoursesError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const [payoutList, setPayoutList] = useState<PayoutRequest[]>(MOCK_PAYOUTS);
-  const [devicesList, setDevicesList] = useState<DeviceSession[]>(MOCK_DEVICES);
+
+  // Instructor applications state
+  const [applicationsList, setApplicationsList] = useState<InstructorApplicationDto[]>([]);
+  const [applicationsLoading, setApplicationsLoading] = useState(false);
+  const [applicationsError, setApplicationsError] = useState<string | null>(null);
+  const [applicationFilterStatus, setApplicationFilterStatus] = useState<string>('PENDING');
+  const [reviewingApp, setReviewingApp] = useState<InstructorApplicationDto | null>(null);
+  const [reviewAction, setReviewAction] = useState<'approve' | 'reject'>('approve');
+  const [reviewRejectReason, setReviewRejectReason] = useState('');
+  const [reviewCommissionRate, setReviewCommissionRate] = useState<number>(0.7);
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+
+  const [payoutList, setPayoutList] = useState<PayoutRequest[]>([]);
+  const [payoutLoading, setPayoutLoading] = useState(false);
+  const [payoutError, setPayoutError] = useState<string | null>(null);
+  const [payoutFilterStatus, setPayoutFilterStatus] = useState<string>('ALL');
+
+  // Modal / form states for approving & rejecting payouts
+  const [approvingPayout, setApprovingPayout] = useState<PayoutRequest | null>(null);
+  const [bankRefNo, setBankRefNo] = useState('');
+  const [approvingSubmitting, setApprovingSubmitting] = useState(false);
+
+  const [rejectingPayout, setRejectingPayout] = useState<PayoutRequest | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectingSubmitting, setRejectingSubmitting] = useState(false);
+
+  const [devicesList, setDevicesList] = useState<DeviceSession[]>([]);
+  const [devicesLoading, setDevicesLoading] = useState(false);
+  const [devicesError, setDevicesError] = useState<string | null>(null);
+  const [deviceSearchQuery, setDeviceSearchQuery] = useState('');
 
   // Reject Modal state
   const [rejectingCourseId, setRejectingCourseId] = useState<string | null>(null);
@@ -57,6 +99,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBac
   const [certSearching, setCertSearching] = useState(false);
   const [certResult, setCertResult] = useState<Certificate | null>(null);
   const [certError, setCertError] = useState<string | null>(null);
+
+  // Refund & Dispute state
+  const [refundList, setRefundList] = useState<RefundRequest[]>([]);
+  const [refundLoading, setRefundLoading] = useState(false);
+  const [refundError, setRefundError] = useState<string | null>(null);
+  const [refundFilterStatus, setRefundFilterStatus] = useState<string>('ALL');
+  const [approvingRefund, setApprovingRefund] = useState<RefundRequest | null>(null);
+  const [approveRefundNote, setApproveRefundNote] = useState('');
+  const [approveRefundSubmitting, setApproveRefundSubmitting] = useState(false);
+  const [rejectingRefund, setRejectingRefund] = useState<RefundRequest | null>(null);
+  const [rejectRefundReason, setRejectRefundReason] = useState('');
+  const [rejectRefundSubmitting, setRejectRefundSubmitting] = useState(false);
+  const [learnerProgressMap, setLearnerProgressMap] = useState<Record<string, { rate: number; status: string } | null>>({});
+  const [checkingProgressId, setCheckingProgressId] = useState<string | null>(null);
+
   const [copiedHash, setCopiedHash] = useState(false);
 
   const loadPendingCourses = useCallback(async () => {
@@ -73,7 +130,231 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBac
     }
   }, []);
 
-  useEffect(() => { void loadPendingCourses(); }, [loadPendingCourses]);
+  const loadRefundRequests = useCallback(async (status?: string) => {
+    setRefundLoading(true);
+    setRefundError(null);
+    try {
+      const res = await orderApi.getAdminRefundRequests({
+        page: 0,
+        size: 50,
+        status: status && status !== 'ALL' ? status : undefined,
+      });
+      setRefundList(res.items || []);
+    } catch (err: any) {
+      console.error('Lỗi tải danh sách khiếu nại hoàn tiền:', err);
+      setRefundError(err?.message || 'Không tải được danh sách khiếu nại hoàn tiền.');
+      setRefundList([]);
+    } finally {
+      setRefundLoading(false);
+    }
+  }, []);
+
+  const handleCheckProgress = async (learnerId: string, courseId: string, itemKey: string) => {
+    setCheckingProgressId(itemKey);
+    try {
+      const res: any = await axiosClient.get(`/enrollment-service/api/v1/enrollments/courses/${courseId}`, {
+        params: { size: 100 },
+      });
+      const data = res?.data?.data || res?.data;
+      const items: any[] = data?.content || data?.items || [];
+      const enrollment = items.find((e: any) => e.learnerId === learnerId);
+      if (enrollment) {
+        setLearnerProgressMap(prev => ({
+          ...prev,
+          [itemKey]: {
+            rate: enrollment.completedRate ?? 0,
+            status: enrollment.status || 'ACTIVE',
+          },
+        }));
+      } else {
+        setLearnerProgressMap(prev => ({
+          ...prev,
+          [itemKey]: { rate: 0, status: 'NOT_FOUND' },
+        }));
+      }
+    } catch (err) {
+      console.error('Lỗi kiểm tra tiến độ:', err);
+      setLearnerProgressMap(prev => ({
+        ...prev,
+        [itemKey]: { rate: 0, status: 'UNKNOWN' },
+      }));
+    } finally {
+      setCheckingProgressId(null);
+    }
+  };
+
+  const handleConfirmApproveRefund = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!approvingRefund) return;
+    setApproveRefundSubmitting(true);
+    try {
+      await orderApi.approveRefund(approvingRefund.id, {
+        note: approveRefundNote.trim() || undefined,
+      });
+      setActionSuccessMsg(`Đã phê duyệt hoàn tiền cho đơn hàng #${approvingRefund.orderId.slice(0, 8).toUpperCase()}`);
+      setApprovingRefund(null);
+      setApproveRefundNote('');
+      void loadRefundRequests(refundFilterStatus);
+    } catch (err: any) {
+      alert(err?.message || 'Có lỗi xảy ra khi duyệt hoàn tiền.');
+    } finally {
+      setApproveRefundSubmitting(false);
+    }
+  };
+
+  const handleConfirmRejectRefund = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rejectingRefund) return;
+    if (!rejectRefundReason.trim()) {
+      alert('Vui lòng nhập lý do từ chối hoàn tiền.');
+      return;
+    }
+    setRejectRefundSubmitting(true);
+    try {
+      await orderApi.rejectRefund(rejectingRefund.id, {
+        note: rejectRefundReason.trim(),
+      });
+      setActionSuccessMsg(`Đã từ chối khiếu nại hoàn tiền cho đơn hàng #${rejectingRefund.orderId.slice(0, 8).toUpperCase()}`);
+      setRejectingRefund(null);
+      setRejectRefundReason('');
+      void loadRefundRequests(refundFilterStatus);
+    } catch (err: any) {
+      alert(err?.message || 'Có lỗi xảy ra khi từ chối hoàn tiền.');
+    } finally {
+      setRejectRefundSubmitting(false);
+    }
+  };
+
+  const loadDevices = useCallback(async (searchQuery?: string) => {
+    setDevicesLoading(true);
+    setDevicesError(null);
+    try {
+      const myFp = await getDeviceFingerprint();
+      const list = await deviceApi.getAdminDevices(searchQuery, myFp);
+      setDevicesList(list);
+    } catch (err: any) {
+      setDevicesError(err?.message || 'Không tải được danh sách thiết bị từ Redis.');
+      setDevicesList([]);
+    } finally {
+      setDevicesLoading(false);
+    }
+  }, []);
+
+  const loadPayouts = useCallback(async (status?: string) => {
+    setPayoutLoading(true);
+    setPayoutError(null);
+    try {
+      const res = await payoutApi.getAdminPayouts({
+        page: 0,
+        size: 50,
+        status: status && status !== 'ALL' ? status : undefined,
+      });
+      setPayoutList(res.items);
+    } catch (err: any) {
+      console.error('Lỗi tải danh sách rút tiền:', err);
+      setPayoutError(err?.message || 'Không tải được danh sách yêu cầu rút tiền từ Finance Service.');
+      setPayoutList([]);
+    } finally {
+      setPayoutLoading(false);
+    }
+  }, []);
+
+  // Financial Security & Step-up PIN State
+  const [financialSessionActive, setFinancialSessionActive] = useState(false);
+  const [financialRemaining, setFinancialRemaining] = useState(0);
+  const [hasPin, setHasPin] = useState(false);
+  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+  const [isSecuritySettingsOpen, setIsSecuritySettingsOpen] = useState(false);
+
+  const checkFinancialStatus = useCallback(async () => {
+    try {
+      const res = await securityApi.getStatus();
+      const data = res.data;
+      setHasPin(Boolean(data?.hasPin));
+      setFinancialSessionActive(Boolean(data?.financialSessionActive));
+      setFinancialRemaining(data?.remainingSeconds || 0);
+      return data;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    let timer: any;
+    if (financialSessionActive && financialRemaining > 0) {
+      timer = setTimeout(() => {
+        setFinancialRemaining(prev => {
+          if (prev <= 1) {
+            setFinancialSessionActive(false);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [financialSessionActive, financialRemaining]);
+
+  const handleFinancialUnlocked = useCallback(() => {
+    setFinancialSessionActive(true);
+    setFinancialRemaining(15 * 60);
+    void loadPayouts(payoutFilterStatus);
+  }, [loadPayouts, payoutFilterStatus]);
+
+  const handleLockFinancialSession = async () => {
+    try {
+      await securityApi.lockSession();
+    } catch {
+      // Ignore
+    }
+    setFinancialSessionActive(false);
+    setFinancialRemaining(0);
+  };
+
+  const formatCountdown = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  useEffect(() => {
+    void loadPendingCourses();
+  }, [loadPendingCourses]);
+
+  const loadApplications = useCallback(async (status?: string) => {
+    setApplicationsLoading(true);
+    setApplicationsError(null);
+    try {
+      const page = await instructorApplicationApi.getApplicationsForAdmin(status, 0, 50);
+      setApplicationsList(page.content || []);
+    } catch (err: any) {
+      setApplicationsError(err?.message || 'Không tải được danh sách đơn giảng viên.');
+      setApplicationsList([]);
+    } finally {
+      setApplicationsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'instructors') {
+      void loadApplications(applicationFilterStatus);
+    }
+    if (activeTab === 'devices') {
+      void loadDevices();
+    }
+    if (activeTab === 'refunds') {
+      void loadRefundRequests(refundFilterStatus);
+    }
+    if (activeTab === 'payouts') {
+      checkFinancialStatus().then(status => {
+        if (status?.financialSessionActive) {
+          void loadPayouts(payoutFilterStatus);
+        } else {
+          setIsPinModalOpen(true);
+        }
+      });
+    }
+  }, [activeTab, applicationFilterStatus, payoutFilterStatus, loadApplications, loadDevices, loadPayouts, checkFinancialStatus]);
 
   const handleApproveCourse = async (courseId: string) => {
     setActionLoading(true);
@@ -142,27 +423,97 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBac
     setTimeout(() => setCopiedHash(false), 2500);
   };
 
-  const handleApprovePayout = (payoutId: string) => {
-    setPayoutList(prev => prev.map(p => {
-      if (p.id === payoutId) {
-        return { ...p, status: 'APPROVED' as const };
+  const handleConfirmApprovePayout = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!approvingPayout) return;
+    setApprovingSubmitting(true);
+    setPayoutError(null);
+    try {
+      await payoutApi.approvePayout({
+        payoutId: approvingPayout.id,
+        bankReferenceNo: bankRefNo.trim() || `REF-${Date.now()}`,
+        transferAt: new Date().toISOString().slice(0, 19),
+      });
+      setActionSuccessMsg(`Đã duyệt chi trả thành công cho yêu cầu #${approvingPayout.id}.`);
+      setApprovingPayout(null);
+      setBankRefNo('');
+      await loadPayouts(payoutFilterStatus);
+      setTimeout(() => setActionSuccessMsg(''), 4000);
+    } catch (err: any) {
+      setPayoutError(err?.message || 'Không thể phê duyệt yêu cầu rút tiền.');
+    } finally {
+      setApprovingSubmitting(false);
+    }
+  };
+
+  const handleConfirmRejectPayout = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rejectingPayout) return;
+    if (!rejectReason.trim()) {
+      setPayoutError('Vui lòng nhập lý do từ chối yêu cầu.');
+      return;
+    }
+    setRejectingSubmitting(true);
+    setPayoutError(null);
+    try {
+      await payoutApi.rejectPayout({
+        payoutId: rejectingPayout.id,
+        rejectReason: rejectReason.trim(),
+      });
+      setActionSuccessMsg(`Đã từ chối yêu cầu #${rejectingPayout.id} và hoàn lại tiền khả dụng cho giảng viên.`);
+      setRejectingPayout(null);
+      setRejectReason('');
+      await loadPayouts(payoutFilterStatus);
+      setTimeout(() => setActionSuccessMsg(''), 4000);
+    } catch (err: any) {
+      setPayoutError(err?.message || 'Không thể từ chối yêu cầu rút tiền.');
+    } finally {
+      setRejectingSubmitting(false);
+    }
+  };
+
+  const handleKickDevice = async (dev: DeviceSession) => {
+    const fp = dev.deviceFingerprint || dev.deviceId;
+    if (!dev.userId) {
+      setDevicesList(prev => prev.filter(d => d.deviceId !== dev.deviceId));
+      return;
+    }
+    setActionLoading(true);
+    try {
+      await deviceApi.revokeDevice(dev.userId, fp);
+      setActionSuccessMsg(`Đã thu hồi phiên và chặn thiết bị #${fp.slice(0, 8)} của người dùng ${dev.userEmail || dev.userId}.`);
+      await loadDevices(deviceSearchQuery);
+      setTimeout(() => setActionSuccessMsg(''), 4000);
+    } catch (err: any) {
+      setDevicesError(err?.message || 'Không thể thu hồi phiên thiết bị.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleKickAllOtherDevices = async () => {
+    const otherDevices = devicesList.filter(d => !d.isCurrent && d.userId);
+    if (otherDevices.length === 0) {
+      setActionSuccessMsg('Không có thiết bị phụ nào để thu hồi.');
+      setTimeout(() => setActionSuccessMsg(''), 3000);
+      return;
+    }
+    setActionLoading(true);
+    try {
+      for (const dev of otherDevices) {
+        const fp = dev.deviceFingerprint || dev.deviceId;
+        if (dev.userId) {
+          await deviceApi.revokeDevice(dev.userId, fp);
+        }
       }
-      return p;
-    }));
-    setActionSuccessMsg(`[Bản mẫu] Giao diện đổi ${payoutId} sang APPROVED; chưa có lệnh chuyển khoản nào được gửi.`);
-    setTimeout(() => setActionSuccessMsg(''), 4000);
-  };
-
-  const handleKickDevice = (deviceId: string) => {
-    setDevicesList(prev => prev.filter(d => d.deviceId !== deviceId));
-    setActionSuccessMsg(`[Bản mẫu] Đã ẩn thiết bị ${deviceId} khỏi danh sách; phiên đăng nhập chưa bị thu hồi.`);
-    setTimeout(() => setActionSuccessMsg(''), 4000);
-  };
-
-  const handleKickAllOtherDevices = () => {
-    setDevicesList(prev => prev.filter(d => d.isCurrent));
-    setActionSuccessMsg('[Bản mẫu] Danh sách thiết bị đã được lọc; chưa đăng xuất thiết bị nào.');
-    setTimeout(() => setActionSuccessMsg(''), 4000);
+      setActionSuccessMsg(`Đã thu hồi thành công ${otherDevices.length} thiết bị khỏi hệ thống.`);
+      await loadDevices(deviceSearchQuery);
+      setTimeout(() => setActionSuccessMsg(''), 4000);
+    } catch (err: any) {
+      setDevicesError(err?.message || 'Có lỗi xảy ra khi thu hồi phiên các thiết bị.');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   return (
@@ -231,6 +582,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBac
             badge: coursesList.filter(c => c.status === 'PENDING').length || undefined
           },
           { 
+            id: 'instructors', 
+            label: 'Duyệt Giảng Viên (Applications)', 
+            icon: Video,
+            badge: applicationsList.filter(a => a.status === 'PENDING').length || undefined
+          },
+          { 
             id: 'certificates', 
             label: 'Thẩm Định & Tra Cứu Chứng Chỉ (Audit)', 
             icon: Award 
@@ -244,6 +601,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBac
             id: 'devices', 
             label: 'Giám Sát Đa Thiết Bị (Redis)', 
             icon: Smartphone 
+          },
+          { 
+            id: 'refunds', 
+            label: 'Khiếu Nại & Hoàn Tiền (3 ngày)', 
+            icon: RotateCcw,
+            badge: refundList.filter(r => r.status === 'PENDING').length || undefined
           }
         ].map(t => (
           <button
@@ -366,6 +729,142 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBac
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB: DUYỆT ĐƠN GIẢNG VIÊN (INSTRUCTOR APPLICATIONS) */}
+      {activeTab === 'instructors' && (
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                <Video className="w-5 h-5 text-indigo-600" />
+                Hàng Chờ Xét Duyệt Giảng Viên
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Xem xét hồ sơ chuyên môn, cấp quyền INSTRUCTOR và phân bổ tỷ lệ chia sẻ doanh thu cho giảng viên mới.
+              </p>
+            </div>
+
+            {/* Filter buttons */}
+            <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl text-xs font-semibold">
+              {['PENDING', 'APPROVED', 'REJECTED', 'ALL'].map(st => (
+                <button
+                  key={st}
+                  onClick={() => {
+                    setApplicationFilterStatus(st);
+                    void loadApplications(st);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                    applicationFilterStatus === st
+                      ? 'bg-white text-indigo-700 shadow-xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {st === 'PENDING' ? 'Chờ duyệt' : st === 'APPROVED' ? 'Đã duyệt' : st === 'REJECTED' ? 'Từ chối' : 'Tất cả'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {applicationsError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{applicationsError}</span>
+            </div>
+          )}
+
+          {applicationsLoading ? (
+            <div className="p-12 text-center text-slate-500 text-xs flex items-center justify-center gap-2">
+              <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
+              <span>Đang tải danh sách đơn đăng ký giảng viên...</span>
+            </div>
+          ) : applicationsList.length === 0 ? (
+            <div className="p-12 text-center text-slate-500 text-xs bg-slate-50 rounded-2xl border border-dashed border-slate-200 space-y-1">
+              <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
+              <p className="font-bold text-slate-700">Không có đơn đăng ký nào trong danh mục này</p>
+              <p className="text-slate-400">Tất cả các hồ sơ đã được xử lý xong.</p>
+            </div>
+          ) : (
+            <div className="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-200">
+              {applicationsList.map(app => (
+                <div key={app.id} className="p-5 hover:bg-slate-50/60 transition space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-slate-900">{app.applicantName}</span>
+                        <span className="text-xs text-slate-400 font-mono">({app.applicantEmail})</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          app.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' :
+                          app.status === 'REJECTED' ? 'bg-rose-100 text-rose-700' :
+                          'bg-amber-100 text-amber-800'
+                        }`}>
+                          {app.status === 'APPROVED' ? 'Đã duyệt' : app.status === 'REJECTED' ? 'Từ chối' : 'Chờ duyệt'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-indigo-700 font-semibold mt-0.5">
+                        Chuyên môn: {app.expertise} • {app.experienceYears} năm kinh nghiệm
+                      </p>
+                    </div>
+
+                    {app.status === 'PENDING' && (
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => {
+                            setReviewingApp(app);
+                            setReviewAction('approve');
+                            setReviewCommissionRate(0.7);
+                          }}
+                          className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          <span>Duyệt giảng viên</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setReviewingApp(app);
+                            setReviewAction('reject');
+                            setReviewRejectReason('');
+                          }}
+                          className="px-3.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                          <span>Từ chối</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-slate-600 bg-white p-3 rounded-xl border border-slate-200 leading-relaxed italic">
+                    "{app.bio}"
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-4 text-[11px] text-slate-500">
+                    {app.portfolioUrl && (
+                      <a href={app.portfolioUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-indigo-600 hover:underline font-medium">
+                        <ExternalLink className="w-3 h-3" />
+                        <span>Portfolio / LinkedIn</span>
+                      </a>
+                    )}
+                    {app.cvUrl && (
+                      <a href={app.cvUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-indigo-600 hover:underline font-medium">
+                        <FileText className="w-3 h-3" />
+                        <span>CV / Hồ sơ đính kèm</span>
+                      </a>
+                    )}
+                    <span className="text-slate-400">
+                      Nộp lúc: {new Date(app.createdAt).toLocaleString('vi-VN')}
+                    </span>
+                    {app.rejectionReason && (
+                      <span className="text-rose-600 font-semibold">
+                        Lý do từ chối: {app.rejectionReason}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -550,70 +1049,327 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBac
         </div>
       )}
 
-      {/* TAB 3: PAYOUT APPROVALS */}
+      {/* TAB 3: PAYOUT APPROVALS (CONNECTED TO FINANCE SERVICE) */}
       {activeTab === 'payouts' && (
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
+        !financialSessionActive ? (
+          <div className="bg-white p-12 rounded-2xl border border-amber-200 text-center max-w-lg mx-auto space-y-4 shadow-xs animate-in fade-in">
+            <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200">
+              <ShieldAlert className="w-8 h-8" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-800">Khu Vực Phê Duyệt Chi Tiền Đang Được Khóa</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto leading-relaxed">
+                Để bảo vệ an toàn cho ngân quỹ hệ thống và tránh thao tác chi trả trái phép, vui lòng xác thực mã PIN bảo mật cấp 2 để mở khóa phiên làm việc (15 phút).
+              </p>
+            </div>
+            <div className="pt-2 flex flex-col sm:flex-row gap-2 justify-center">
+              <button
+                type="button"
+                onClick={() => setIsPinModalOpen(true)}
+                className="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <KeyRound className="w-4 h-4" />
+                {hasPin ? 'Mở Khóa Bằng Mã PIN Quản Trị' : 'Thiết Lập Mã PIN Lần Đầu'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4 animate-in fade-in">
+            {/* Session status banner */}
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 text-amber-900 font-medium">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Phiên bảo mật phê duyệt chi trả đang hoạt động (Thời gian còn: <strong className="font-mono text-amber-950 font-bold">{formatCountdown(financialRemaining)}</strong>)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSecuritySettingsOpen(true)}
+                  className="px-2.5 py-1 text-slate-600 hover:text-slate-800 hover:bg-amber-100 rounded-lg transition font-semibold cursor-pointer text-[11px]"
+                >
+                  Đổi PIN / Mật khẩu
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLockFinancialSession}
+                  className="px-2.5 py-1 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition font-bold cursor-pointer text-[11px]"
+                >
+                  Khóa phiên ngay
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h3 className="font-bold text-base text-slate-900">Duyệt Yêu Cầu Rút Tiền Từ Giảng Viên (Payout Requests)</h3>
-              <p className="text-xs text-slate-500">Đối soát số dư và phê duyệt lệnh chi trả doanh thu giảng dạy.</p>
+              <p className="text-xs text-slate-500">Đối soát số dư ví và phê duyệt lệnh chi trả chuyển khoản doanh thu.</p>
             </div>
-            <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 border border-slate-200">
-              Dữ liệu mô phỏng (Chờ Finance Service)
-            </span>
+            <div className="flex items-center gap-2">
+              <div className="flex rounded-lg border border-slate-200 p-0.5 bg-slate-50 text-xs">
+                {(['ALL', 'PENDING', 'SUCCESS', 'REJECTED'] as const).map(st => (
+                  <button
+                    key={st}
+                    type="button"
+                    onClick={() => setPayoutFilterStatus(st)}
+                    className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer ${
+                      payoutFilterStatus === st
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    {st === 'ALL' ? 'Tất cả' : st === 'PENDING' ? 'Chờ duyệt' : st === 'SUCCESS' ? 'Đã chi trả' : 'Bị từ chối'}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => void loadPayouts(payoutFilterStatus)}
+                className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 transition cursor-pointer"
+                title="Làm mới"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${payoutLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
           </div>
 
-          <div className="border border-slate-200 rounded-xl overflow-hidden">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
-                <tr>
-                  <th className="p-3">Giảng viên</th>
-                  <th className="p-3">Số tiền</th>
-                  <th className="p-3">Thông tin ngân hàng</th>
-                  <th className="p-3">Trạng thái</th>
-                  <th className="p-3 text-right">Xử lý</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {payoutList.map(p => (
-                  <tr key={p.id} className="hover:bg-slate-50">
-                    <td className="p-3">
-                      <p className="font-bold text-slate-800">{p.instructorName}</p>
-                      <span className="text-[10px] text-slate-400 font-mono">{p.id}</span>
-                    </td>
-                    <td className="p-3 font-bold text-emerald-700 text-sm">
-                      {formatVND(p.amount)}
-                    </td>
-                    <td className="p-3 text-slate-600">
-                      <div>{p.bankName}</div>
-                      <div className="font-mono font-bold text-slate-800">{p.bankAccount} ({p.bankOwner})</div>
-                    </td>
-                    <td className="p-3">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                        p.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-amber-100 text-amber-800 border border-amber-200'
-                      }`}>
-                        {p.status === 'APPROVED' ? 'Đã chi trả' : 'Chờ duyệt chi'}
-                      </span>
-                    </td>
-                    <td className="p-3 text-right">
-                      {p.status === 'PENDING' ? (
-                        <button
-                          onClick={() => handleApprovePayout(p.id)}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-xs transition cursor-pointer"
-                        >
-                          Duyệt Chuyển Khoản
-                        </button>
-                      ) : (
-                        <span className="text-slate-400 text-xs font-medium">Đã tất toán</span>
-                      )}
-                    </td>
+          {payoutError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 font-medium flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{payoutError}</span>
+            </div>
+          )}
+
+          {payoutLoading ? (
+            <div className="p-12 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
+              <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+              <span className="text-xs">Đang tải danh sách lệnh rút tiền từ Finance Service...</span>
+            </div>
+          ) : payoutList.length === 0 ? (
+            <div className="p-12 text-center text-slate-400 border border-dashed border-slate-200 rounded-xl">
+              <DollarSign className="w-8 h-8 mx-auto mb-2 opacity-40 text-slate-400" />
+              <p className="text-xs font-medium">Không có yêu cầu rút tiền nào trong danh sách.</p>
+            </div>
+          ) : (
+            <div className="border border-slate-200 rounded-xl overflow-x-auto">
+              <table className="w-full text-left text-xs min-w-[650px]">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                  <tr>
+                    <th className="p-3">Giảng viên / Mã GD</th>
+                    <th className="p-3">Số tiền rút</th>
+                    <th className="p-3">Thông tin tài khoản nhận</th>
+                    <th className="p-3">Thời gian gửi</th>
+                    <th className="p-3">Trạng thái</th>
+                    <th className="p-3 text-right">Xử lý</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {payoutList.map(p => (
+                    <tr key={p.id} className="hover:bg-slate-50 transition">
+                      <td className="p-3">
+                        <p className="font-bold text-slate-800">{p.instructorName || 'Giảng viên'}</p>
+                        <span className="text-[10px] text-slate-400 font-mono">{p.id}</span>
+                      </td>
+                      <td className="p-3 font-bold text-emerald-700 text-sm">
+                        {formatVND(p.amount)}
+                      </td>
+                      <td className="p-3 text-slate-600">
+                        <div className="font-medium text-slate-800">{p.bankName}</div>
+                        <div className="font-mono text-[11px] text-slate-600">
+                          {p.bankAccount} {p.bankOwner ? `(${p.bankOwner})` : ''}
+                        </div>
+                      </td>
+                      <td className="p-3 text-slate-500 text-[11px]">
+                        {p.requestedAt}
+                      </td>
+                      <td className="p-3">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                          p.status === 'APPROVED' || p.status === 'SUCCESS'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : p.status === 'REJECTED'
+                            ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                            : 'bg-amber-100 text-amber-800 border border-amber-200'
+                        }`}>
+                          {p.status === 'APPROVED' || p.status === 'SUCCESS'
+                            ? 'Đã chi trả'
+                            : p.status === 'REJECTED'
+                            ? 'Bị từ chối'
+                            : 'Chờ duyệt chi'}
+                        </span>
+                        {p.bankReferenceNo && (
+                          <p className="text-[10px] text-slate-500 font-mono mt-0.5">Số GD: {p.bankReferenceNo}</p>
+                        )}
+                        {p.rejectReason && (
+                          <p className="text-[10px] text-rose-600 mt-0.5">Lý do: {p.rejectReason}</p>
+                        )}
+                      </td>
+                      <td className="p-3 text-right">
+                        {p.status === 'PENDING' ? (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setApprovingPayout(p);
+                                setBankRefNo('');
+                              }}
+                              className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold shadow-xs transition cursor-pointer"
+                            >
+                              Duyệt Chi
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRejectingPayout(p);
+                                setRejectReason('');
+                              }}
+                              className="px-2.5 py-1.5 border border-rose-300 hover:bg-rose-50 text-rose-700 rounded-lg text-xs font-bold transition cursor-pointer"
+                            >
+                              Từ chối
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 text-xs font-medium">Hoàn tất</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Modal Phê duyệt chi trả */}
+          {approvingPayout && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+              <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+                <div>
+                  <h4 className="text-base font-bold text-slate-900">Phê duyệt lệnh chi trả giảng viên</h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Xác nhận đã chuyển khoản thành công từ tài khoản ngân hàng của nền tảng.
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Mã lệnh:</span>
+                    <span className="font-mono text-slate-800">{approvingPayout.id}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Số tiền:</span>
+                    <strong className="text-emerald-700 text-sm font-extrabold">{formatVND(approvingPayout.amount)}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Ngân hàng thụ hưởng:</span>
+                    <span className="font-semibold text-slate-800">{approvingPayout.bankName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Số tài khoản:</span>
+                    <span className="font-mono font-bold text-slate-900">{approvingPayout.bankAccount} ({approvingPayout.bankOwner})</span>
+                  </div>
+                </div>
+
+                <form onSubmit={handleConfirmApprovePayout} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Mã tham chiếu ngân hàng / Số bút toán (Bank Ref No):
+                    </label>
+                    <input
+                      type="text"
+                      value={bankRefNo}
+                      onChange={e => setBankRefNo(e.target.value)}
+                      placeholder="VD: FT261009123456 hoặc VCB_REF_01"
+                      className="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:border-emerald-600"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">Để trống hệ thống sẽ tự sinh mã tham chiếu đối soát.</p>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      disabled={approvingSubmitting}
+                      onClick={() => setApprovingPayout(null)}
+                      className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-100 transition cursor-pointer"
+                    >
+                      Hủy bỏ
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={approvingSubmitting}
+                      className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {approvingSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      Xác nhận Duyệt Chi
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Modal Từ chối lệnh rút tiền */}
+          {rejectingPayout && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+              <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+                <div>
+                  <h4 className="text-base font-bold text-rose-900">Từ chối lệnh rút tiền</h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Số tiền tạm khóa sẽ được hoàn trả lại vào số dư khả dụng của giảng viên.
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Mã lệnh:</span>
+                    <span className="font-mono text-slate-800">{rejectingPayout.id}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Số tiền:</span>
+                    <strong className="text-slate-800 font-bold">{formatVND(rejectingPayout.amount)}</strong>
+                  </div>
+                </div>
+
+                <form onSubmit={handleConfirmRejectPayout} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Lý do từ chối (bắt buộc):
+                    </label>
+                    <textarea
+                      required
+                      rows={3}
+                      value={rejectReason}
+                      onChange={e => setRejectReason(e.target.value)}
+                      placeholder="VD: Sai thông tin chủ tài khoản ngân hàng thụ hưởng, vui lòng cập nhật lại..."
+                      className="w-full p-2.5 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-rose-600"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      disabled={rejectingSubmitting}
+                      onClick={() => setRejectingPayout(null)}
+                      className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-100 transition cursor-pointer"
+                    >
+                      Hủy bỏ
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={rejectingSubmitting}
+                      className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {rejectingSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      Xác nhận Từ Chối
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+            </div>
           </div>
-        </div>
+        )
       )}
+
 
       {/* TAB 4: REDIS MULTI-DEVICE MANAGEMENT */}
       {activeTab === 'devices' && (
@@ -622,58 +1378,457 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBac
             <div>
               <h3 className="font-bold text-base text-slate-900">Quản Trị Thiết Bị Đăng Nhập (Redis Token Store)</h3>
               <p className="text-xs text-slate-500">
-                Key Redis: <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-600 font-mono">user:usr_vn_9824:device</code> • Giới hạn tối đa 2 thiết bị đồng thời để chống chia sẻ tài khoản.
+                Key Redis: <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-600 font-mono">user:&#123;userId&#125;:device</code> • Giới hạn tối đa 2 thiết bị đồng thời để chống chia sẻ tài khoản.
               </p>
             </div>
 
-            <button
-              onClick={handleKickAllOtherDevices}
-              className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              Đăng xuất khỏi tất cả thiết bị khác (Kick Device)
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => void loadDevices(deviceSearchQuery)}
+                disabled={devicesLoading}
+                className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${devicesLoading ? 'animate-spin' : ''}`} />
+                Làm mới
+              </button>
+              <button
+                onClick={handleKickAllOtherDevices}
+                disabled={actionLoading || devicesList.filter(d => !d.isCurrent).length === 0}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                Đăng xuất khỏi tất cả thiết bị khác
+              </button>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {devicesList.map(dev => (
-              <div
-                key={dev.deviceId}
-                className={`p-4 rounded-xl border transition-all ${
-                  dev.isCurrent
-                    ? 'border-emerald-500 bg-emerald-50/30 ring-1 ring-emerald-500/50'
-                    : 'border-slate-200 bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {dev.os.includes('iOS') ? <Smartphone className="w-5 h-5 text-slate-700" /> : <Laptop className="w-5 h-5 text-slate-700" />}
-                    <span className="font-bold text-xs text-slate-900">{dev.deviceName}</span>
+          {/* Search bar */}
+          <div className="relative max-w-md">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Tìm theo email hoặc tên người dùng..."
+              value={deviceSearchQuery}
+              onChange={e => setDeviceSearchQuery(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') void loadDevices(deviceSearchQuery); }}
+              className="w-full pl-9 pr-4 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-400"
+            />
+          </div>
+
+          {devicesError && (
+            <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{devicesError}</span>
+            </div>
+          )}
+
+          {devicesLoading ? (
+            <div className="py-16 flex flex-col items-center justify-center text-slate-400 gap-2">
+              <Loader2 className="w-7 h-7 animate-spin text-slate-600" />
+              <p className="text-xs font-medium">Đang tải danh sách thiết bị từ Redis...</p>
+            </div>
+          ) : devicesList.length === 0 ? (
+            <div className="py-12 text-center text-xs text-slate-500 border border-dashed border-slate-200 rounded-2xl">
+              Không có phiên thiết bị nào đang hoạt động phù hợp với tiêu chí tìm kiếm.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {devicesList.map(dev => (
+                <div
+                  key={`${dev.userId}-${dev.deviceId}`}
+                  className={`p-4 rounded-xl border transition-all ${
+                    dev.isCurrent
+                      ? 'border-emerald-500 bg-emerald-50/30 ring-1 ring-emerald-500/50'
+                      : dev.isBlocked
+                      ? 'border-rose-300 bg-rose-50/20'
+                      : 'border-slate-200 bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Laptop className="w-5 h-5 text-slate-700" />
+                      <span className="font-bold text-xs text-slate-900">{dev.deviceName}</span>
+                    </div>
+                    {dev.isCurrent ? (
+                      <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                        Hiện tại
+                      </span>
+                    ) : dev.isBlocked ? (
+                      <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-bold">
+                        Đã chặn
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] font-bold">
+                        Hoạt động
+                      </span>
+                    )}
                   </div>
-                  {dev.isCurrent && (
-                    <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                      Hiện tại
-                    </span>
+
+                  <div className="mt-3 space-y-1 text-[11px] text-slate-500 font-mono">
+                    {dev.userEmail && (
+                      <div>User: <span className="text-slate-800 font-bold">{dev.userEmail}</span></div>
+                    )}
+                    {dev.userFullName && (
+                      <div>Họ tên: <span className="text-slate-700 font-sans">{dev.userFullName}</span></div>
+                    )}
+                    <div className="truncate">FP: <span className="text-slate-600 font-mono" title={dev.deviceFingerprint || dev.deviceId}>{(dev.deviceFingerprint || dev.deviceId).slice(0, 16)}...</span></div>
+                    <div className="text-slate-400 font-sans mt-2 flex items-center gap-1">
+                      <span>Đăng nhập: {dev.lastActive}</span>
+                    </div>
+                  </div>
+
+                  {!dev.isCurrent && !dev.isBlocked && (
+                    <button
+                      onClick={() => handleKickDevice(dev)}
+                      disabled={actionLoading}
+                      className="w-full mt-3 py-1.5 bg-slate-200 hover:bg-rose-100 hover:text-rose-700 text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                    >
+                      Thu hồi phiên (Kick)
+                    </button>
                   )}
                 </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
-                <div className="mt-3 space-y-1 text-[11px] text-slate-500 font-mono">
-                  <div>IP: <span className="text-slate-700">{dev.ipAddress}</span></div>
-                  <div>Trình duyệt: <span className="text-slate-700">{dev.browser}</span></div>
-                  <div>HĐH: <span className="text-slate-700">{dev.os}</span></div>
-                  <div className="text-slate-400 font-sans mt-2">{dev.lastActive}</div>
-                </div>
-
-                {!dev.isCurrent && (
-                  <button
-                    onClick={() => handleKickDevice(dev.deviceId)}
-                    className="w-full mt-3 py-1.5 bg-slate-200 hover:bg-rose-100 hover:text-rose-700 text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
-                  >
-                    Thu hồi phiên (Kick)
-                  </button>
-                )}
+      {/* Tab: Quản lý Khiếu nại & Hoàn tiền (Chính sách 3 ngày) */}
+      {activeTab === 'refunds' && (
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+                <h3 className="font-bold text-base text-slate-900">
+                  Đối Soát Khiếu Nại & Xử Lý Hoàn Tiền (3 Ngày)
+                </h3>
               </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Thẩm định yêu cầu hủy đơn & hoàn tiền của học viên. Admin có thể đối soát tiến độ học tập trước khi quyết định.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void loadRefundRequests(refundFilterStatus)}
+                disabled={refundLoading}
+                className="px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${refundLoading ? 'animate-spin' : ''}`} />
+                Làm mới
+              </button>
+            </div>
+          </div>
+
+          {/* Filter Bar */}
+          <div className="flex items-center gap-2 border-b border-slate-100 pb-3 text-xs">
+            <span className="text-slate-400 font-medium mr-1">Bộ lọc trạng thái:</span>
+            {[
+              { id: 'ALL', label: 'Tất cả' },
+              { id: 'PENDING', label: 'Chờ xét duyệt' },
+              { id: 'APPROVED', label: 'Đã hoàn tiền' },
+              { id: 'REJECTED', label: 'Đã từ chối' },
+            ].map(f => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => {
+                  setRefundFilterStatus(f.id);
+                  void loadRefundRequests(f.id);
+                }}
+                className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer ${
+                  refundFilterStatus === f.id
+                    ? 'bg-[#2c3e50] text-white shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                {f.label}
+              </button>
             ))}
+          </div>
+
+          {refundError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{refundError}</span>
+            </div>
+          )}
+
+          {refundLoading ? (
+            <div className="py-16 flex flex-col items-center justify-center text-slate-400 gap-2">
+              <Loader2 className="w-7 h-7 animate-spin text-[#e74c3c]" />
+              <p className="text-xs font-medium">Đang tải danh sách khiếu nại hoàn tiền...</p>
+            </div>
+          ) : refundList.length === 0 ? (
+            <div className="py-16 text-center text-xs text-slate-400 flex flex-col items-center gap-2">
+              <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+              <span>Không có yêu cầu khiếu nại nào theo bộ lọc đã chọn.</span>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {refundList.map(req => {
+                const isPending = req.status === 'PENDING';
+                const isApproved = req.status === 'APPROVED';
+                const isRejected = req.status === 'REJECTED';
+
+                return (
+                  <div
+                    key={req.id}
+                    className="p-5 rounded-2xl border border-slate-200 hover:border-slate-300 transition-all space-y-4 bg-slate-50/40"
+                  >
+                    {/* Header info */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold">
+                          <RotateCcw className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm text-slate-900">
+                              Đơn hàng #{req.orderId.slice(0, 8).toUpperCase()}
+                            </span>
+                            {isPending && (
+                              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 flex items-center gap-1">
+                                <Clock className="w-3 h-3" /> Chờ Admin duyệt
+                              </span>
+                            )}
+                            {isApproved && (
+                              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                                <CheckCircle className="w-3 h-3" /> Đã hoàn tiền
+                              </span>
+                            )}
+                            {isRejected && (
+                              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 flex items-center gap-1">
+                                <XCircle className="w-3 h-3" /> Đã bác bỏ
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-3">
+                            <span>Học viên ID: <code className="font-mono text-slate-600">{req.learnerId.slice(0, 12)}...</code></span>
+                            <span>•</span>
+                            <span>Gửi khiếu nại: {new Date(req.createdAt).toLocaleString('vi-VN')}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <div className="text-base font-black text-rose-600">
+                          {formatVND(req.amount)}
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-medium">
+                          Số tiền hoàn theo hóa đơn
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Complaint Reason & Details */}
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-200 text-xs space-y-1.5">
+                      <div className="flex items-center gap-2 font-bold text-slate-800">
+                        <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+                        <span>Lý do khiếu nại: <span className="text-[#2c3e50]">{req.reason}</span></span>
+                      </div>
+                      {req.detail && (
+                        <p className="text-slate-600 text-xs pl-6 leading-relaxed bg-slate-50 p-2.5 rounded-lg border border-slate-100 italic">
+                          "{req.detail}"
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Courses in Order & Progress Audit */}
+                    <div className="space-y-2">
+                      <span className="text-xs font-bold text-slate-700">Khóa học trong đơn & Đối soát tiến độ:</span>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {(req.items || []).map(item => {
+                          const itemKey = `${req.learnerId}_${item.courseId}`;
+                          const progress = learnerProgressMap[itemKey];
+                          const isChecking = checkingProgressId === itemKey;
+
+                          return (
+                            <div
+                              key={item.courseId}
+                              className="p-3 bg-white rounded-xl border border-slate-200 flex flex-col justify-between text-xs space-y-2"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <BookOpen className="w-4 h-4 text-[#e74c3c] shrink-0" />
+                                  <span className="font-semibold text-slate-800 truncate" title={item.courseName}>
+                                    {item.courseName}
+                                  </span>
+                                </div>
+                                <span className="font-bold text-slate-700 shrink-0">
+                                  {formatVND(item.finalPrice)}
+                                </span>
+                              </div>
+
+                              <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                                {progress !== undefined && progress !== null ? (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-slate-500">Tiến độ học:</span>
+                                    <span className={`font-bold px-2 py-0.5 rounded-full ${
+                                      progress.rate > 50
+                                        ? 'bg-rose-100 text-rose-800'
+                                        : 'bg-emerald-100 text-emerald-800'
+                                    }`}>
+                                      {progress.rate}%
+                                    </span>
+                                    {progress.rate > 50 && (
+                                      <span className="text-[10px] text-rose-600 italic">(&gt;50%: Cân nhắc từ chối)</span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCheckProgress(req.learnerId, item.courseId, itemKey)}
+                                    disabled={isChecking}
+                                    className="text-indigo-600 hover:text-indigo-800 font-bold hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                  >
+                                    <Search className={`w-3 h-3 ${isChecking ? 'animate-spin' : ''}`} />
+                                    {isChecking ? 'Đang kiểm tra...' : 'Kiểm tra tiến độ học tập'}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Resolution Note if resolved */}
+                    {req.adminNote && (
+                      <div className="p-3 bg-slate-100 rounded-xl text-xs text-slate-700 space-y-1">
+                        <span className="font-bold text-slate-800">Ghi chú thẩm định của Admin:</span>
+                        <p className="text-slate-600 italic">{req.adminNote}</p>
+                      </div>
+                    )}
+
+                    {/* Action buttons for PENDING */}
+                    {isPending && (
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRejectingRefund(req);
+                            setRejectRefundReason('');
+                          }}
+                          className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-50 text-rose-700 hover:bg-rose-100 transition cursor-pointer"
+                        >
+                          Từ chối hoàn tiền
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setApprovingRefund(req);
+                            setApproveRefundNote('Chấp thuận hoàn tiền theo chính sách bảo vệ học viên trong 3 ngày');
+                          }}
+                          className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition cursor-pointer"
+                        >
+                          Phê duyệt hoàn tiền
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Modal Phê duyệt Hoàn tiền */}
+      {approvingRefund && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white max-w-md w-full rounded-2xl p-6 shadow-2xl space-y-4 border border-slate-200 animate-in fade-in">
+            <div className="flex items-center gap-2 text-emerald-600">
+              <CheckCircle className="w-5 h-5" />
+              <h3 className="font-bold text-base text-slate-900">Phê Duyệt Hoàn Tiền Đơn Hàng</h3>
+            </div>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Thao tác này sẽ khấu trừ số tiền hoa hồng trong ví <strong>PENDING</strong> của giảng viên, chuyển đơn hàng sang trạng thái <strong>REFUNDED</strong> và thu hồi quyền học của học viên.
+            </p>
+
+            <form onSubmit={handleConfirmApproveRefund} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Ghi chú thẩm định:
+                </label>
+                <textarea
+                  value={approveRefundNote}
+                  onChange={e => setApproveRefundNote(e.target.value)}
+                  placeholder="Ghi chú xác nhận duyệt hoàn tiền..."
+                  rows={3}
+                  className="w-full p-3 text-xs border border-slate-300 rounded-xl focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setApprovingRefund(null)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={approveRefundSubmitting}
+                  className="px-4 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl shadow-md transition disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                >
+                  {approveRefundSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  {approveRefundSubmitting ? 'Đang xử lý...' : 'Xác nhận Duyệt hoàn tiền'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Từ chối Hoàn tiền */}
+      {rejectingRefund && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white max-w-md w-full rounded-2xl p-6 shadow-2xl space-y-4 border border-slate-200 animate-in fade-in">
+            <div className="flex items-center gap-2 text-rose-600">
+              <AlertTriangle className="w-5 h-5" />
+              <h3 className="font-bold text-base text-slate-900">Từ Chối Khiếu Nại Hoàn Tiền</h3>
+            </div>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Vui lòng nhập lý do từ chối cụ thể để gửi thông báo giải thích đến học viên (ví dụ: Tiến độ học tập đã đạt &gt;50%, không thỏa điều kiện chính sách).
+            </p>
+
+            <form onSubmit={handleConfirmRejectRefund} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Lý do từ chối (Bắt buộc):
+                </label>
+                <textarea
+                  value={rejectRefundReason}
+                  onChange={e => setRejectRefundReason(e.target.value)}
+                  placeholder="Ví dụ: Học viên đã hoàn thành hơn 60% chương trình học, không thuộc diện được hoàn phí..."
+                  rows={3}
+                  required
+                  className="w-full p-3 text-xs border border-slate-300 rounded-xl focus:outline-none focus:border-rose-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setRejectingRefund(null)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={rejectRefundSubmitting}
+                  className="px-4 py-2 text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white rounded-xl shadow-md transition disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                >
+                  {rejectRefundSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
+                  {rejectRefundSubmitting ? 'Đang gửi...' : 'Xác nhận Từ chối'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -720,6 +1875,127 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBac
           </div>
         </div>
       )}
+
+      {/* Modal Xét Duyệt Đơn Giảng Viên */}
+      {reviewingApp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in">
+          <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
+            <div className={`p-5 text-white flex items-center justify-between ${
+              reviewAction === 'approve' ? 'bg-gradient-to-r from-emerald-800 to-teal-900' : 'bg-gradient-to-r from-rose-800 to-red-950'
+            }`}>
+              <div className="flex items-center gap-2.5">
+                {reviewAction === 'approve' ? <CheckCircle className="w-5 h-5 text-emerald-400" /> : <XCircle className="w-5 h-5 text-rose-400" />}
+                <h3 className="font-bold text-sm">
+                  {reviewAction === 'approve' ? 'Phê Duyệt Đơn Giảng Viên' : 'Từ Chối Đơn Giảng Viên'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReviewingApp(null)}
+                className="p-1 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setReviewSubmitting(true);
+                setApplicationsError(null);
+                try {
+                  await instructorApplicationApi.reviewApplication(reviewingApp.id, {
+                    approved: reviewAction === 'approve',
+                    rejectionReason: reviewAction === 'reject' ? reviewRejectReason.trim() : undefined,
+                    defaultCommissionRate: reviewAction === 'approve' ? Number(reviewCommissionRate) || 0.7 : undefined,
+                  });
+                  setActionSuccessMsg(reviewAction === 'approve' ? `Đã phê duyệt và cấp quyền INSTRUCTOR cho ${reviewingApp.applicantName} thành công.` : `Đã từ chối đơn của ${reviewingApp.applicantName}.`);
+                  setReviewingApp(null);
+                  await loadApplications(applicationFilterStatus);
+                  setTimeout(() => setActionSuccessMsg(''), 4000);
+                } catch (err: any) {
+                  setApplicationsError(err?.message || 'Không thể xử lý đơn đăng ký.');
+                } finally {
+                  setReviewSubmitting(false);
+                }
+              }}
+              className="p-6 space-y-4 text-xs"
+            >
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
+                <p className="font-bold text-slate-900">{reviewingApp.applicantName} ({reviewingApp.applicantEmail})</p>
+                <p className="text-slate-600">Chuyên môn: {reviewingApp.expertise} • {reviewingApp.experienceYears} năm kinh nghiệm</p>
+              </div>
+
+              {reviewAction === 'approve' ? (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Tỷ lệ chia sẻ doanh thu cho Giảng viên (mặc định 0.70 = 70%)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    min="0.1"
+                    max="1.0"
+                    value={reviewCommissionRate}
+                    onChange={e => setReviewCommissionRate(Number(e.target.value))}
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none focus:border-emerald-500 font-mono"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Hệ thống sẽ tự động gán role INSTRUCTOR, tạo hồ sơ instructor_profiles và kích hoạt ví doanh thu.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Lý do từ chối đơn <span className="text-rose-500">*</span>
+                  </label>
+                  <textarea
+                    required
+                    rows={3}
+                    value={reviewRejectReason}
+                    onChange={e => setReviewRejectReason(e.target.value)}
+                    placeholder="Nêu rõ lý do từ chối để học viên bổ sung thông tin hoặc hồ sơ năng lực..."
+                    className="w-full p-3 text-xs border border-slate-300 rounded-xl focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setReviewingApp(null)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={reviewSubmitting}
+                  className={`px-4 py-2 text-xs font-bold text-white rounded-xl shadow-md transition disabled:opacity-50 cursor-pointer ${
+                    reviewAction === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'
+                  }`}
+                >
+                  {reviewSubmitting ? 'Đang xử lý...' : reviewAction === 'approve' ? 'Xác nhận Phê duyệt' : 'Xác nhận Từ chối'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Financial Security Modals */}
+      <FinancialPinModal
+        isOpen={isPinModalOpen}
+        hasPin={hasPin}
+        onClose={() => setIsPinModalOpen(false)}
+        onSuccess={handleFinancialUnlocked}
+        onPinCreated={() => setHasPin(true)}
+      />
+      <UserSecuritySettingsModal
+        isOpen={isSecuritySettingsOpen}
+        onClose={() => setIsSecuritySettingsOpen(false)}
+        onSecurityUpdated={() => void checkFinancialStatus()}
+      />
     </div>
   );
 };

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import type { NotificationItem } from '../../types';
 import { 
   Bell, Check, Award, CreditCard, ShieldCheck, X, CheckCircle2, 
-  XCircle, Inbox, DollarSign, AlertTriangle, Eye 
+  XCircle, Inbox, DollarSign, AlertTriangle, Eye, MessageSquare 
 } from 'lucide-react';
 
 interface NotificationPopoverProps {
@@ -31,6 +31,8 @@ const getIcon = (type: string) => {
       return <AlertTriangle className="w-4 h-4 text-rose-500" />;
     case 'OTP_SENT':
       return <ShieldCheck className="w-4 h-4 text-indigo-500" />;
+    case 'LESSON_COMMENT':
+      return <MessageSquare className="w-4 h-4 text-amber-500" />;
     default:
       return <Bell className="w-4 h-4 text-purple-500" />;
   }

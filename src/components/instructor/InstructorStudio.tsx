@@ -14,6 +14,7 @@ import promotionApi, { type PromotionDto, type CreatePromotionPayload } from '..
 import { securityApi } from '../../api/securityApi';
 import { FinancialPinModal } from '../security/FinancialPinModal';
 import { UserSecuritySettingsModal } from '../security/UserSecuritySettingsModal';
+import { LessonAttachmentsModal } from './LessonAttachmentsModal';
 import { formatVND } from '../../utils/format';
 import { 
   Users, 
@@ -23,6 +24,7 @@ import {
   Plus, 
   UploadCloud, 
   FileVideo, 
+  FileText,
   CheckCircle2, 
   Clock, 
   Send, 
@@ -105,6 +107,7 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
   const [lessonDurationMinutes, setLessonDurationMinutes] = useState(15);
   const [lessonVideoUrl, setLessonVideoUrl] = useState('');
   const [addingLesson, setAddingLesson] = useState(false);
+  const [attachmentModalLesson, setAttachmentModalLesson] = useState<{ id: string; title: string } | null>(null);
 
   // Course Settings Form State
   const [editTitle, setEditTitle] = useState(initialCourse.title);
@@ -783,8 +786,16 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
                           )}
                         </div>
 
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2.5">
                           <span className="text-slate-400 font-mono text-[11px]">{lesson.durationMinutes} phút</span>
+                          <button
+                            onClick={() => setAttachmentModalLesson({ id: lesson.id, title: lesson.title })}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:text-[#e74c3c] bg-slate-100 hover:bg-rose-50 rounded-lg transition border border-slate-200 hover:border-rose-200 cursor-pointer"
+                            title="Quản lý tài liệu đính kèm"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>Tài liệu</span>
+                          </button>
                           <button
                             onClick={() => handleDeleteLesson(lesson.id, lesson.title)}
                             className="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50 transition cursor-pointer"
@@ -1927,6 +1938,14 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
         isOpen={isSecuritySettingsOpen}
         onClose={() => setIsSecuritySettingsOpen(false)}
         onSecurityUpdated={() => void checkFinancialStatus()}
+      />
+
+      {/* Lesson Attachments Modal (Hạng mục E) */}
+      <LessonAttachmentsModal
+        isOpen={!!attachmentModalLesson}
+        onClose={() => setAttachmentModalLesson(null)}
+        lessonId={attachmentModalLesson?.id || ''}
+        lessonTitle={attachmentModalLesson?.title || ''}
       />
     </div>
   );

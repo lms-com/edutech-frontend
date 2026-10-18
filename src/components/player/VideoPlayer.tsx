@@ -1,7 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Play, Pause, Volume2, VolumeX, Maximize2, ShieldCheck, CheckCircle2, Sparkles, Video, AlertCircle, Loader2 } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Play, Pause, Volume2, VolumeX, Maximize2, ShieldCheck, CheckCircle2, Sparkles, Video, AlertCircle, Loader2, MonitorX, RefreshCw } from 'lucide-react';
 import Hls from 'hls.js';
 import courseApi from '../../api/courseApi';
+import { videoStreamApi } from '../../api/videoStreamApi';
+import { getDeviceFingerprint } from '../../utils/fingerprint';
 
 interface VideoPlayerProps {
   lessonId: string;
@@ -33,12 +35,129 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [playbackError, setPlaybackError] = useState<string | null>(null);
   const [resolvedVideoUrl, setResolvedVideoUrl] = useState<string | null>(null);
 
+  // Cơ chế giới hạn thiết bị xem đồng thời (Concurrent Video Session Limiter)
+  const [streamConflict, setStreamConflict] = useState<{
+    isConflict: boolean;
+    message: string;
+    activeDevice?: string;
+  } | null>(null);
+  const [isClaiming, setIsClaiming] = useState(false);
+  const sessionIdRef = useRef<string>(
+    sessionStorage.getItem('edutech_stream_session_id') ||
+    'sess_' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36)
+  );
+  const heartbeatTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    sessionStorage.setItem('edutech_stream_session_id', sessionIdRef.current);
+  }, []);
+
+  const sendHeartbeat = useCallback(async () => {
+    try {
+      const fp = await getDeviceFingerprint().catch(() => 'unknown-device');
+      const platform = navigator.userAgent.includes('Windows')
+        ? 'Windows PC'
+        : navigator.userAgent.includes('Mac')
+        ? 'macOS'
+        : navigator.userAgent.includes('Android')
+        ? 'Android Phone'
+        : navigator.userAgent.includes('iPhone')
+        ? 'iPhone'
+        : 'Trình duyệt Web';
+
+      const res = await videoStreamApi.heartbeat(lessonId, {
+        sessionId: sessionIdRef.current,
+        deviceFingerprint: fp,
+        clientPlatform: platform,
+      });
+
+      if (res && (!res.active || res.conflict)) {
+        // Có xung đột thiết bị -> Pause video ngay
+        if (videoRef.current && !videoRef.current.paused) {
+          videoRef.current.pause();
+        }
+        setIsPlaying(false);
+        setStreamConflict({
+          isConflict: true,
+          message: res.message || 'Tài khoản đang phát trên thiết bị khác.',
+          activeDevice: res.activeDevice,
+        });
+      }
+    } catch (err) {
+      console.warn('Lỗi kiểm tra phiên phát video:', err);
+    }
+  }, [lessonId]);
+
+  // Khi đang phát video, gửi heartbeat mỗi 15 giây
+  useEffect(() => {
+    if (isPlaying && !streamConflict?.isConflict) {
+      // Gửi ngay 1 nhịp tim đầu tiên
+      void sendHeartbeat();
+      heartbeatTimerRef.current = setInterval(() => {
+        void sendHeartbeat();
+      }, 15000);
+    } else {
+      if (heartbeatTimerRef.current) {
+        clearInterval(heartbeatTimerRef.current);
+        heartbeatTimerRef.current = null;
+      }
+    }
+
+    return () => {
+      if (heartbeatTimerRef.current) {
+        clearInterval(heartbeatTimerRef.current);
+        heartbeatTimerRef.current = null;
+      }
+    };
+  }, [isPlaying, streamConflict, sendHeartbeat]);
+
+  // Giải phóng phiên khi đổi bài học hoặc rời phòng
+  useEffect(() => {
+    const currentLesson = lessonId;
+    const currentSession = sessionIdRef.current;
+    return () => {
+      void videoStreamApi.releaseSession(currentLesson, currentSession);
+    };
+  }, [lessonId]);
+
+  // Chiếm lại quyền phát video trên thiết bị này
+  const handleClaimSession = async () => {
+    setIsClaiming(true);
+    try {
+      const fp = await getDeviceFingerprint().catch(() => 'unknown-device');
+      const platform = navigator.userAgent.includes('Windows')
+        ? 'Windows PC'
+        : navigator.userAgent.includes('Mac')
+        ? 'macOS'
+        : 'Trình duyệt Web';
+
+      const res = await videoStreamApi.claimSession(lessonId, {
+        sessionId: sessionIdRef.current,
+        deviceFingerprint: fp,
+        clientPlatform: platform,
+      });
+
+      if (res && res.active) {
+        setStreamConflict(null);
+        if (videoRef.current) {
+          await videoRef.current.play();
+          setIsPlaying(true);
+        }
+      }
+    } catch (e: any) {
+      console.error('Không thể chiếm lại quyền phát:', e);
+    } finally {
+      setIsClaiming(false);
+    }
+  };
+
   // Never use a video URL embedded in course metadata. Ask the server for a
   // short-lived play URL; course-service checks enrollment/ownership first.
   useEffect(() => {
     let cancelled = false;
     setPlaybackError(null);
     setResolvedVideoUrl(null);
+    setStreamConflict(null);
     void courseApi.getLessonPlayUrl(lessonId)
       .then(url => { if (!cancelled) setResolvedVideoUrl(url); })
       .catch((err: any) => {
@@ -208,6 +327,45 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
   return (
     <div className="relative rounded-2xl overflow-hidden bg-black shadow-2xl border border-slate-800 group">
+      {/* Overlay cảnh báo phát hiện nhiều thiết bị cùng xem (Concurrent Limiter) */}
+      {streamConflict?.isConflict && (
+        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-slate-950/92 px-6 text-center backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-14 h-14 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 mb-1">
+            <MonitorX className="w-8 h-8" />
+          </div>
+          <h4 className="text-base font-bold text-white tracking-wide">
+            Tài khoản đang phát trên thiết bị khác
+          </h4>
+          <p className="text-xs text-slate-300 max-w-md leading-relaxed">
+            {streamConflict.message}
+          </p>
+          {streamConflict.activeDevice && (
+            <div className="text-[11px] font-mono text-amber-400/90 bg-amber-950/40 px-3 py-1 rounded-md border border-amber-800/40">
+              Phiên đang hoạt động: {streamConflict.activeDevice}
+            </div>
+          )}
+          <div className="flex items-center gap-3 mt-2">
+            <button
+              onClick={handleClaimSession}
+              disabled={isClaiming}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#e74c3c] hover:bg-[#c0392b] text-white text-xs font-semibold shadow-lg transition-all cursor-pointer disabled:opacity-60"
+            >
+              {isClaiming ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  Đang chuyển quyền...
+                </>
+              ) : (
+                'Tiếp tục xem trên thiết bị này'
+              )}
+            </button>
+          </div>
+          <p className="text-[10px] text-slate-500 mt-1">
+            Chính sách bảo mật giới hạn 1 phiên phát video hoạt động cùng một thời điểm.
+          </p>
+        </div>
+      )}
+
       {playbackError && (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-2 bg-slate-950/85 px-6 text-center">
           <AlertCircle className="w-8 h-8 text-rose-400" />

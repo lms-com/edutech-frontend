@@ -138,8 +138,18 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
             <span className="text-xs font-semibold text-slate-500">{myCourses.length} khóa học</span>
           </div>
           {enrollmentsLoading ? (
-            <div className="flex items-center gap-2 p-5 bg-white rounded-2xl border border-slate-200 text-sm text-slate-500">
-              <Loader2 className="w-4 h-4 animate-spin" /> Đang tải quyền học...
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+              {[1, 2].map(i => (
+                <div key={i} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs flex flex-col sm:flex-row animate-pulse">
+                  <div className="w-full sm:w-36 aspect-video sm:aspect-auto bg-slate-200" />
+                  <div className="p-4 flex-1 space-y-2.5">
+                    <div className="w-16 h-3 bg-slate-200 rounded" />
+                    <div className="w-3/4 h-4 bg-slate-200 rounded" />
+                    <div className="w-1/2 h-3 bg-slate-100 rounded" />
+                    <div className="w-24 h-7 bg-slate-200 rounded-xl mt-3" />
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">

@@ -127,10 +127,35 @@ export const QuizModal: React.FC<QuizModalProps> = ({
     return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
+  const handleAttemptClose = () => {
+    if (!submitted && Object.keys(selectedAnswers).length > 0) {
+      if (window.confirm('Bài kiểm tra đang diễn ra và bạn chưa nộp bài. Bạn có chắc chắn muốn rời khỏi bài kiểm tra? Tiến độ bài làm sẽ bị hủy.')) {
+        onClose();
+      }
+    } else {
+      onClose();
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleAttemptClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [submitted, selectedAnswers]);
+
   const answeredCount = Object.keys(selectedAnswers).length;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleAttemptClose();
+      }}
+    >
       <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="bg-[#2c3e50] text-white px-6 py-4 flex items-center justify-between">
@@ -154,8 +179,9 @@ export const QuizModal: React.FC<QuizModalProps> = ({
               </div>
             )}
             <button
-              onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+              onClick={handleAttemptClose}
+              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              title="Đóng bài kiểm tra"
             >
               <X className="w-5 h-5" />
             </button>

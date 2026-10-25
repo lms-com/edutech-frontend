@@ -465,6 +465,24 @@ export default function App() {
             />
           }
         />
+        <Route
+          path="/learn/:courseId/lessons/:lessonId"
+          element={
+            <LearningRoomWrapper
+              ensureCourseDetail={ensureCourseDetail}
+              pollEnrollmentActive={pollEnrollmentActive}
+              myEnrollments={myEnrollments}
+              setMyEnrollments={setMyEnrollments}
+              isAuthenticated={isAuthenticated}
+              onOpenAuthModal={() => setIsAuthModalOpen(true)}
+              onOpenCertificate={handleOpenCertificate}
+              showCertificateModal={showCertificateModal}
+              certificateToShow={certificateToShow}
+              setShowCertificateModal={setShowCertificateModal}
+              handleOpenPublicVerify={handleOpenPublicVerify}
+            />
+          }
+        />
 
         {/* 4. Kết quả thanh toán VNPay */}
         <Route
@@ -662,7 +680,7 @@ function CourseDetailWrapper({
   ensureCourseDetail: (c: Course | string) => Promise<Course>;
   onEnrollFreeCourse: (c: Course) => Promise<void>;
 }) {
-  const { courseId } = useParams<{ courseId: string }>();
+  const { courseId, lessonId } = useParams<{ courseId: string; lessonId?: string }>();
   const navigate = useNavigate();
   const [course, setCourse] = useState<Course | null>(courseCache[courseId || ''] || null);
   const [loading, setLoading] = useState(!course);
@@ -767,7 +785,7 @@ function LearningRoomWrapper({
   setShowCertificateModal: (show: boolean) => void;
   handleOpenPublicVerify: (hash?: string) => void;
 }) {
-  const { courseId } = useParams<{ courseId: string }>();
+  const { courseId, lessonId } = useParams<{ courseId: string; lessonId?: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const isPreview = searchParams.get('preview') === 'true';
@@ -872,6 +890,10 @@ function LearningRoomWrapper({
         course={course}
         enrollment={enrollment}
         previewMode={isPreview}
+        initialLessonId={lessonId}
+        onSelectLesson={(newLessonId) => {
+          navigate(`/learn/${course.id}/lessons/${newLessonId}${isPreview ? '?preview=true' : ''}`, { replace: true });
+        }}
         onBack={() => navigate(`/courses/${course.id}`)}
         onOpenCertificate={onOpenCertificate}
       />
@@ -1075,7 +1097,7 @@ function InstructorStudioWrapper({
 }: {
   ensureCourseDetail: (c: Course | string) => Promise<Course>;
 }) {
-  const { courseId } = useParams<{ courseId: string }>();
+  const { courseId, lessonId } = useParams<{ courseId: string; lessonId?: string }>();
   const navigate = useNavigate();
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);

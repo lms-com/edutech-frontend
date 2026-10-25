@@ -19,6 +19,8 @@ interface LearningRoomProps {
   enrollment: EnrollmentDto | null;
   /** Chế độ xem trước dành cho giảng viên/quản trị, không ghi tiến độ hoặc làm quiz. */
   previewMode?: boolean;
+  initialLessonId?: string;
+  onSelectLesson?: (lessonId: string) => void;
   onBack: () => void;
   onOpenCertificate: () => void;
 }
@@ -27,6 +29,8 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
   course,
   enrollment,
   previewMode = false,
+  initialLessonId,
+  onSelectLesson,
   onBack,
   onOpenCertificate
 }) => {
@@ -35,9 +39,25 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
   const allQuizzes = course.sections.map(s => s.quiz).filter((q): q is Quiz => !!q);
   const totalItemsCount = allLessons.length + allQuizzes.length;
 
-  const [currentLessonId, setCurrentLessonId] = useState<string>(
-    allLessons[0]?.id || ''
-  );
+  const [currentLessonId, setCurrentLessonId] = useState<string>(() => {
+    if (initialLessonId && allLessons.some(l => l.id === initialLessonId)) {
+      return initialLessonId;
+    }
+    return allLessons[0]?.id || '';
+  });
+  const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (initialLessonId && initialLessonId !== currentLessonId && allLessons.some(l => l.id === initialLessonId)) {
+      setCurrentLessonId(initialLessonId);
+    }
+  }, [initialLessonId]);
+
+  const selectLesson = (id: string) => {
+    setAutoNextCountdown(null);
+    setCurrentLessonId(id);
+    onSelectLesson?.(id);
+  };
   const [completedLessonIds, setCompletedLessonIds] = useState<string[]>([]);
   const [progressLoading, setProgressLoading] = useState<boolean>(!!enrollment);
   const [progressError, setProgressError] = useState<string | null>(null);
@@ -266,16 +286,83 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
     }));
   };
 
+  useEffect(() => {
+    if (autoNextCountdown === null) return;
+    if (autoNextCountdown <= 0) {
+      const nextLesson = allLessons[currentLessonIndex + 1];
+      if (nextLesson) {
+        selectLesson(nextLesson.id);
+      }
+      setAutoNextCountdown(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setAutoNextCountdown(prev => (prev !== null ? prev - 1 : null));
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [autoNextCountdown, currentLessonIndex, allLessons]);
+
+  const handleVideoEnded = () => {
+    if (currentLessonIndex < allLessons.length - 1) {
+      setAutoNextCountdown(5);
+    }
+  };
+
   const handleNextLesson = () => {
     if (currentLessonIndex < allLessons.length - 1) {
-      setCurrentLessonId(allLessons[currentLessonIndex + 1].id);
+      selectLesson(allLessons[currentLessonIndex + 1].id);
     }
   };
 
   const handlePrevLesson = () => {
     if (currentLessonIndex > 0) {
-      setCurrentLessonId(allLessons[currentLessonIndex - 1].id);
+      selectLesson(allLessons[currentLessonIndex - 1].id);
     }
+  };
+
+  const handleSeekToTime = (seconds: number) => {
+    const video = document.querySelector('video');
+    if (video) {
+      video.currentTime = seconds;
+      video.play().catch(() => {});
+    }
+  };
+
+  const renderCommentWithTimestamps = (text: string) => {
+    const regex = /\[(\d{1,2}):(\d{2})\]/g;
+    const elements: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = regex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        elements.push(text.substring(lastIndex, match.index));
+      }
+      const m = parseInt(match[1], 10);
+      const s = parseInt(match[2], 10);
+      const totalSec = m * 60 + s;
+      const tag = match[0];
+
+      elements.push(
+        <button
+          key={`${match.index}-${tag}`}
+          type="button"
+          onClick={() => handleSeekToTime(totalSec)}
+          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 hover:text-white font-mono text-[11px] font-bold border border-blue-500/30 transition-colors cursor-pointer"
+          title={`Bấm để chuyển video tới ${tag}`}
+        >
+          <Clock className="w-3 h-3 inline-block" />
+          {tag}
+        </button>
+      );
+      lastIndex = regex.lastIndex;
+    }
+
+    if (lastIndex < text.length) {
+      elements.push(text.substring(lastIndex));
+    }
+
+    return elements.length > 0 ? elements : text;
   };
 
   return (
@@ -386,14 +473,53 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
         <div className="lg:col-span-8 flex flex-col gap-5">
           {/* HLS Video Player */}
           {currentLesson && (
-            <VideoPlayer
-              lessonId={currentLesson.id}
-              lessonTitle={currentLesson.title}
-              mediaId={currentLesson.mediaId}
-              isEncrypted={currentLesson.isHlsEncrypted}
-              onLessonComplete={handleLessonComplete}
-              isCompleted={completedLessonIds.includes(currentLesson.id)}
-            />
+            <div className="relative rounded-2xl overflow-hidden shadow-2xl border border-slate-800">
+              <VideoPlayer
+                lessonId={currentLesson.id}
+                lessonTitle={currentLesson.title}
+                mediaId={currentLesson.mediaId}
+                isEncrypted={currentLesson.isHlsEncrypted}
+                onLessonComplete={handleLessonComplete}
+                onEnded={handleVideoEnded}
+                isCompleted={completedLessonIds.includes(currentLesson.id)}
+              />
+
+              {/* Lớp phủ đếm ngược tự chuyển bài khi kết thúc video (Auto-next Video) */}
+              {autoNextCountdown !== null && currentLessonIndex < allLessons.length - 1 && (
+                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/85 backdrop-blur-sm p-6 text-center animate-in fade-in duration-200">
+                  <div className="w-14 h-14 rounded-full border-4 border-[#2563eb] border-t-transparent animate-spin mb-3 flex items-center justify-center">
+                    <span className="font-mono font-bold text-white text-base">
+                      {autoNextCountdown}
+                    </span>
+                  </div>
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                    Tự động chuyển bài học sau {autoNextCountdown}s
+                  </span>
+                  <h3 className="text-sm md:text-base font-bold text-white mt-1 max-w-md truncate">
+                    Bài tiếp theo: {allLessons[currentLessonIndex + 1]?.title}
+                  </h3>
+                  <div className="flex items-center gap-3 mt-5">
+                    <button
+                      onClick={() => {
+                        const nextLesson = allLessons[currentLessonIndex + 1];
+                        if (nextLesson) selectLesson(nextLesson.id);
+                        setAutoNextCountdown(null);
+                      }}
+                      className="px-5 py-2 rounded-xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-bold shadow-lg transition-all flex items-center gap-2 cursor-pointer hover:scale-105"
+                    >
+                      <PlayCircle className="w-4 h-4" />
+                      Phát ngay
+                    </button>
+                    <button
+                      onClick={() => setAutoNextCountdown(null)}
+                      className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
+                    >
+                      Hủy
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {/* Lesson Navigation and Info Bar */}
@@ -732,7 +858,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
 
                           {/* Content */}
                           <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line pl-10">
-                            {comment.content}
+                            {renderCommentWithTimestamps(comment.content)}
                           </p>
 
                           {/* Actions: Like & Reply */}
@@ -826,7 +952,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                                   </div>
 
                                   <p className="text-xs text-slate-300 leading-relaxed pl-5 whitespace-pre-line">
-                                    {reply.content}
+                                    {renderCommentWithTimestamps(reply.content)}
                                   </p>
 
                                   <div className="pl-5 pt-0.5">
@@ -913,7 +1039,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                           return (
                             <div
                               key={lesson.id}
-                              onClick={() => setCurrentLessonId(lesson.id)}
+                              onClick={() => selectLesson(lesson.id)}
                               className={`px-3 py-2.5 flex items-center justify-between gap-3 cursor-pointer transition-all ${
                                 isCurrent
                                   ? 'bg-[#2563eb]/10 border-l-4 border-[#2563eb] text-white'

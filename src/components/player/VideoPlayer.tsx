@@ -24,6 +24,8 @@ interface VideoPlayerProps {
 
   onLessonComplete: (lessonId: string) => void;
 
+  onEnded?: () => void;
+
   isCompleted?: boolean;
 
 }
@@ -39,6 +41,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   isEncrypted,
 
   onLessonComplete,
+
+  onEnded,
 
   isCompleted = false
 
@@ -846,6 +850,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           setIsPlaying(false);
 
           onLessonComplete(lessonId);
+
+          onEnded?.();
 
         }}
 

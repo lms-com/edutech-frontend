@@ -707,7 +707,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
               disabled={isClaiming}
 
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#e74c3c] hover:bg-[#c0392b] text-white text-xs font-semibold shadow-lg transition-all cursor-pointer disabled:opacity-60"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-semibold shadow-lg transition-all cursor-pointer disabled:opacity-60"
 
             >
 
@@ -813,7 +813,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
           onClick={handleFastTrack80}
 
-          className="pointer-events-auto bg-[#e74c3c]/90 hover:bg-[#e74c3c] text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-lg flex items-center gap-1.5 transition-all hover:scale-105"
+          className="pointer-events-auto bg-[#2563eb]/90 hover:bg-[#2563eb] text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-lg flex items-center gap-1.5 transition-all hover:scale-105"
 
           title="Tua đến 80% để tự động kích hoạt tiến độ hoàn thành bài học"
 
@@ -867,7 +867,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
         >
 
-          <div className="w-16 h-16 rounded-full bg-[#e74c3c] text-white flex items-center justify-center shadow-xl hover:scale-110 transition-transform">
+          <div className="w-16 h-16 rounded-full bg-[#2563eb] text-white flex items-center justify-center shadow-xl hover:scale-110 transition-transform">
 
             <Play className="w-8 h-8 ml-1" />
 
@@ -901,7 +901,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
             onChange={handleSeek}
 
-            className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-[#e74c3c]"
+            className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-[#2563eb]"
 
           />
 
@@ -919,7 +919,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
               onClick={togglePlay}
 
-              className="p-1.5 hover:text-[#e74c3c] transition-colors"
+              className="p-1.5 hover:text-[#2563eb] transition-colors"
 
             >
 
@@ -933,7 +933,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
               onClick={toggleMute}
 
-              className="p-1.5 hover:text-[#e74c3c] transition-colors"
+              className="p-1.5 hover:text-[#2563eb] transition-colors"
 
             >
 
@@ -1015,7 +1015,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
               }}
 
-              className="p-1.5 hover:text-[#e74c3c] transition-colors"
+              className="p-1.5 hover:text-[#2563eb] transition-colors"
 
               title="Toàn màn hình"
 

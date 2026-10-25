@@ -45,11 +45,11 @@ export const LearningLayout: React.FC<LearningLayoutProps> = ({
           <div className="hidden md:flex flex-col items-end gap-1">
             <div className="flex items-center gap-2 text-xs font-medium text-slate-300">
               <span>Tiến độ hoàn thành:</span>
-              <span className="font-bold text-[#e74c3c] font-mono">{progressPercent}%</span>
+              <span className="font-bold text-[#2563eb] font-mono">{progressPercent}%</span>
             </div>
             <div className="w-36 h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
               <div
-                className="h-full bg-gradient-to-r from-orange-500 to-[#e74c3c] rounded-full transition-all duration-500"
+                className="h-full bg-gradient-to-r from-orange-500 to-[#2563eb] rounded-full transition-all duration-500"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>

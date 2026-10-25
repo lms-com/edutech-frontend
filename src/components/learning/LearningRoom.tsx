@@ -279,7 +279,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#1e293b] text-slate-100 flex flex-col font-sans selection:bg-[#e74c3c]/30">
+    <div className="min-h-screen bg-[#1e293b] text-slate-100 flex flex-col font-sans selection:bg-[#2563eb]/30">
       {/* Top Bar (Cinema Mode Header) */}
       <header className="bg-[#0f172a] border-b border-slate-800 px-4 md:px-6 py-3 sticky top-0 z-30 shadow-md">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
@@ -310,7 +310,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
               <div className="w-24 md:w-32 h-2 bg-slate-800 rounded-full overflow-hidden">
                 <div 
                   className={`h-full transition-all duration-500 rounded-full ${
-                    isAllCompleted ? 'bg-[#27ae60]' : 'bg-[#e74c3c]'
+                    isAllCompleted ? 'bg-[#27ae60]' : 'bg-[#2563eb]'
                   }`}
                   style={{ width: `${progressPercent}%` }}
                 />
@@ -329,7 +329,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
               disabled={!canGetCertificate}
               className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-xl font-bold text-xs transition-all shadow-md ${
                 canGetCertificate
-                  ? 'bg-[#e74c3c] hover:bg-[#c0392b] text-white animate-bounce ring-2 ring-amber-300/40 cursor-pointer shadow-red-900/30'
+                  ? 'bg-[#2563eb] hover:bg-[#1d4ed8] text-white animate-bounce ring-2 ring-amber-300/40 cursor-pointer shadow-red-900/30'
                   : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60'
               }`}
               title={canGetCertificate ? 'Bấm để xem và tải chứng chỉ tốt nghiệp!' : 'Hoàn thành 100% bài học để mở khóa chứng chỉ'}
@@ -399,7 +399,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
           {/* Lesson Navigation and Info Bar */}
           <div className="bg-[#0f172a] rounded-xl p-4 border border-slate-800 flex flex-wrap items-center justify-between gap-3 shadow-md">
             <div>
-              <span className="text-[11px] font-semibold text-[#e74c3c] uppercase tracking-wider">
+              <span className="text-[11px] font-semibold text-[#2563eb] uppercase tracking-wider">
                 Đang xem bài học
               </span>
               <h2 className="text-base md:text-lg font-bold text-white mt-0.5">
@@ -433,7 +433,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                 onClick={() => setActiveTab('overview')}
                 className={`flex-1 py-3 px-4 text-center border-b-2 transition-colors flex items-center justify-center gap-2 ${
                   activeTab === 'overview'
-                    ? 'border-[#e74c3c] text-[#e74c3c] bg-slate-800/40'
+                    ? 'border-[#2563eb] text-[#2563eb] bg-slate-800/40'
                     : 'border-transparent text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -445,7 +445,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                 onClick={() => setActiveTab('resources')}
                 className={`flex-1 py-3 px-4 text-center border-b-2 transition-colors flex items-center justify-center gap-2 ${
                   activeTab === 'resources'
-                    ? 'border-[#e74c3c] text-[#e74c3c] bg-slate-800/40'
+                    ? 'border-[#2563eb] text-[#2563eb] bg-slate-800/40'
                     : 'border-transparent text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -457,7 +457,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                 onClick={() => setActiveTab('qa')}
                 className={`flex-1 py-3 px-4 text-center border-b-2 transition-colors flex items-center justify-center gap-2 ${
                   activeTab === 'qa'
-                    ? 'border-[#e74c3c] text-[#e74c3c] bg-slate-800/40'
+                    ? 'border-[#2563eb] text-[#2563eb] bg-slate-800/40'
                     : 'border-transparent text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -595,7 +595,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                               target="_blank"
                               rel="noreferrer"
                               download
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-[#e74c3c] text-slate-200 hover:text-white rounded-lg transition-all border border-slate-700 hover:border-[#e74c3c] shadow-sm shrink-0 cursor-pointer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-[#2563eb] text-slate-200 hover:text-white rounded-lg transition-all border border-slate-700 hover:border-[#2563eb] shadow-sm shrink-0 cursor-pointer"
                             >
                               <Download className="w-3.5 h-3.5" />
                               Tải về
@@ -613,7 +613,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                   {/* Header & Refresh */}
                   <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                     <div className="flex items-center gap-2">
-                      <MessageSquare className="w-4 h-4 text-[#e74c3c]" />
+                      <MessageSquare className="w-4 h-4 text-[#2563eb]" />
                       <h4 className="text-xs font-bold text-white uppercase tracking-wider">
                         Hỏi đáp & Thảo luận ({comments.reduce((acc, c) => acc + 1 + (c.replies?.length || 0), 0)})
                       </h4>
@@ -683,7 +683,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                   {/* Comments List */}
                   {commentsLoading ? (
                     <div className="py-12 text-center text-slate-500 flex flex-col items-center gap-2">
-                      <Loader2 className="w-6 h-6 animate-spin text-[#e74c3c]" />
+                      <Loader2 className="w-6 h-6 animate-spin text-[#2563eb]" />
                       <span className="text-xs">Đang tải câu hỏi thảo luận...</span>
                     </div>
                   ) : comments.length === 0 ? (
@@ -916,7 +916,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                               onClick={() => setCurrentLessonId(lesson.id)}
                               className={`px-3 py-2.5 flex items-center justify-between gap-3 cursor-pointer transition-all ${
                                 isCurrent
-                                  ? 'bg-[#e74c3c]/10 border-l-4 border-[#e74c3c] text-white'
+                                  ? 'bg-[#2563eb]/10 border-l-4 border-[#2563eb] text-white'
                                   : 'hover:bg-slate-800/50 text-slate-300'
                               }`}
                             >
@@ -924,7 +924,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                                 {isDone ? (
                                   <CheckCircle2 className="w-4 h-4 text-[#27ae60] shrink-0" />
                                 ) : isCurrent ? (
-                                  <PlayCircle className="w-4 h-4 text-[#e74c3c] shrink-0 animate-pulse" />
+                                  <PlayCircle className="w-4 h-4 text-[#2563eb] shrink-0 animate-pulse" />
                                 ) : (
                                   <Circle className="w-4 h-4 text-slate-600 shrink-0" />
                                 )}
@@ -1014,7 +1014,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
             {/* Quick Helper Badge */}
             <div className="p-3 bg-[#0b1320] border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
               <span>Đạt 100% mở khóa chứng chỉ A4</span>
-              <span className="text-[#e74c3c] font-semibold">EduTech LMS 2026</span>
+              <span className="text-[#2563eb] font-semibold">EduTech LMS 2026</span>
             </div>
           </div>
         </div>

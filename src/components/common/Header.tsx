@@ -101,13 +101,13 @@ export const Header: React.FC<HeaderProps> = ({
             className="flex items-center gap-2.5 cursor-pointer group" 
             onClick={() => onSelectPortal('learner')}
           >
-            <div className="w-10 h-10 rounded-xl bg-[#2c3e50] text-white flex items-center justify-center font-black text-sm shadow-md border border-[#e74c3c]/30 group-hover:scale-105 transition duration-200">
-              <GraduationCap className="w-6 h-6 text-[#e74c3c]" />
+            <div className="w-10 h-10 rounded-xl bg-[#2c3e50] text-white flex items-center justify-center font-black text-sm shadow-md border border-[#2563eb]/30 group-hover:scale-105 transition duration-200">
+              <GraduationCap className="w-6 h-6 text-[#2563eb]" />
             </div>
             <div className="flex flex-col">
               <div className="flex items-center gap-1.5">
                 <span className="font-black text-lg tracking-tight text-[#2c3e50]">
-                  Edu<span className="text-[#e74c3c]">Tech</span>
+                  Edu<span className="text-[#2563eb]">Tech</span>
                 </span>
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 uppercase">
                   LMS
@@ -248,7 +248,7 @@ export const Header: React.FC<HeaderProps> = ({
                       onClick={() => { setProfileDropdownOpen(false); onSelectPortal('learner'); }}
                       className="w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition cursor-pointer"
                     >
-                      <BookOpen className="w-4 h-4 text-[#e74c3c]" />
+                      <BookOpen className="w-4 h-4 text-[#2563eb]" />
                       Trang Học viên
                     </button>
                     {onOpenOrderHistory && (
@@ -340,7 +340,7 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="pl-2 border-l border-slate-200 flex items-center gap-2">
               <button
                 onClick={onOpenAuthModal}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-[#e74c3c] hover:bg-[#c0392b] text-white shadow-sm transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white shadow-sm transition-all cursor-pointer"
               >
                 <LogIn className="w-3.5 h-3.5" />
                 <span>Đăng nhập</span>

@@ -467,7 +467,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
         {/* Header bar */}
         <div className="bg-gradient-to-r from-[#2c3e50] to-[#1a252f] p-5 text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-[#e74c3c] font-black border border-white/20">
+            <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-[#2563eb] font-black border border-white/20">
               ET
             </div>
             <div>
@@ -510,7 +510,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
           </div>
         ) : tab === 'forgot' ? (
           <div className="flex items-center justify-between px-6 py-3 border-b border-slate-200 bg-slate-50 text-xs font-bold text-slate-700">
-            <div className="flex items-center gap-2 text-[#e74c3c]">
+            <div className="flex items-center gap-2 text-[#2563eb]">
               <KeyRound className="w-4 h-4" />
               <span>Khôi phục mật khẩu</span>
             </div>
@@ -529,18 +529,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
               onClick={() => { setTab('login'); setErrorMsg(null); }}
               className={`flex-1 py-3 flex items-center justify-center gap-2 border-b-2 transition ${
                 tab === 'login'
-                  ? 'border-[#e74c3c] text-[#2c3e50] bg-white'
+                  ? 'border-[#2563eb] text-[#2c3e50] bg-white'
                   : 'border-transparent text-slate-500 hover:text-slate-800'
               }`}
             >
-              <LogIn className="w-4 h-4 text-[#e74c3c]" />
+              <LogIn className="w-4 h-4 text-[#2563eb]" />
               Đăng nhập
             </button>
             <button
               onClick={() => { setTab('register'); setErrorMsg(null); }}
               className={`flex-1 py-3 flex items-center justify-center gap-2 border-b-2 transition ${
                 tab === 'register'
-                  ? 'border-[#e74c3c] text-[#2c3e50] bg-white'
+                  ? 'border-[#2563eb] text-[#2c3e50] bg-white'
                   : 'border-transparent text-slate-500 hover:text-slate-800'
               }`}
             >
@@ -617,7 +617,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                     onChange={e => setGooglePassword(e.target.value)}
                     placeholder="Ít nhất 6 ký tự"
                     required
-                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#e74c3c]/30 focus:border-[#e74c3c]"
+                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563eb]/30 focus:border-[#2563eb]"
                   />
                 </div>
               </div>
@@ -632,7 +632,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                     onChange={e => setGoogleConfirmPassword(e.target.value)}
                     placeholder="Nhập lại mật khẩu"
                     required
-                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#e74c3c]/30 focus:border-[#e74c3c]"
+                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563eb]/30 focus:border-[#2563eb]"
                   />
                 </div>
               </div>
@@ -697,7 +697,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                     value={email}
                     onChange={e => setEmail(e.target.value)}
                     placeholder="learner@edutech.vn"
-                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#e74c3c]/30 focus:border-[#e74c3c]"
+                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563eb]/30 focus:border-[#2563eb]"
                   />
                 </div>
               </div>
@@ -708,7 +708,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                   <button
                     type="button"
                     onClick={() => { setTab('forgot'); setErrorMsg(null); setSuccessMsg(null); }}
-                    className="text-[11px] font-semibold text-[#e74c3c] hover:underline cursor-pointer"
+                    className="text-[11px] font-semibold text-[#2563eb] hover:underline cursor-pointer"
                   >
                     Quên mật khẩu?
                   </button>
@@ -720,7 +720,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#e74c3c]/30 focus:border-[#e74c3c]"
+                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563eb]/30 focus:border-[#2563eb]"
                   />
                 </div>
               </div>
@@ -728,7 +728,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full mt-2 py-2.5 bg-[#e74c3c] hover:bg-[#c0392b] text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
+                className="w-full mt-2 py-2.5 bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
               >
                 {loading ? 'Đang xác thực...' : 'Đăng nhập ngay'}
                 <ArrowRight className="w-4 h-4" />
@@ -774,7 +774,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                         onChange={e => setFullName(e.target.value)}
                         placeholder="Nguyễn Văn A"
                         required
-                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#e74c3c]/30 focus:border-[#e74c3c]"
+                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563eb]/30 focus:border-[#2563eb]"
                       />
                     </div>
                   </div>
@@ -789,7 +789,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                         onChange={e => setEmail(e.target.value)}
                         placeholder="name@example.com"
                         required
-                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#e74c3c]/30 focus:border-[#e74c3c]"
+                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563eb]/30 focus:border-[#2563eb]"
                       />
                     </div>
                   </div>
@@ -804,7 +804,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                         onChange={e => setPassword(e.target.value)}
                         placeholder="Ít nhất 6 ký tự"
                         required
-                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#e74c3c]/30 focus:border-[#e74c3c]"
+                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563eb]/30 focus:border-[#2563eb]"
                       />
                     </div>
                   </div>
@@ -880,7 +880,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                     <button
                       type="button"
                       onClick={() => { setRegisterStep(1); setErrorMsg(null); }}
-                      className="text-[11px] text-[#e74c3c] hover:underline font-semibold cursor-pointer"
+                      className="text-[11px] text-[#2563eb] hover:underline font-semibold cursor-pointer"
                     >
                       Đổi thông tin
                     </button>
@@ -897,7 +897,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                         type="button"
                         disabled={loading || resendCountdown > 0}
                         onClick={handleRegisterInit}
-                        className="text-[11px] font-semibold text-[#e74c3c] hover:underline disabled:text-slate-400 disabled:no-underline flex items-center gap-1 cursor-pointer"
+                        className="text-[11px] font-semibold text-[#2563eb] hover:underline disabled:text-slate-400 disabled:no-underline flex items-center gap-1 cursor-pointer"
                       >
                         <RotateCcw className="w-3 h-3" />
                         {resendCountdown > 0 ? `Gửi lại sau (${resendCountdown}s)` : 'Gửi lại mã'}
@@ -912,7 +912,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                         onChange={e => setRegisterOtp(e.target.value.replace(/\D/g, ''))}
                         placeholder="123456"
                         required
-                        className="w-full pl-9 pr-3 py-2 text-xs tracking-widest font-mono font-bold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#e74c3c]/30 focus:border-[#e74c3c]"
+                        className="w-full pl-9 pr-3 py-2 text-xs tracking-widest font-mono font-bold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563eb]/30 focus:border-[#2563eb]"
                       />
                     </div>
                   </div>
@@ -945,7 +945,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                         onChange={e => setEmail(e.target.value)}
                         placeholder="name@example.com"
                         required
-                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#e74c3c]/30 focus:border-[#e74c3c]"
+                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563eb]/30 focus:border-[#2563eb]"
                       />
                     </div>
                   </div>
@@ -953,7 +953,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full mt-2 py-2.5 bg-[#e74c3c] hover:bg-[#c0392b] text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
+                    className="w-full mt-2 py-2.5 bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
                   >
                     {loading ? 'Đang gửi mã...' : 'Gửi mã xác thực OTP'}
                     <ArrowRight className="w-4 h-4" />
@@ -969,7 +969,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                     <button
                       type="button"
                       onClick={() => { setForgotStep(1); setErrorMsg(null); }}
-                      className="text-[11px] text-[#e74c3c] hover:underline font-semibold cursor-pointer"
+                      className="text-[11px] text-[#2563eb] hover:underline font-semibold cursor-pointer"
                     >
                       Đổi email
                     </button>
@@ -982,7 +982,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                         type="button"
                         disabled={loading || resendCountdown > 0}
                         onClick={() => handleSendOtp()}
-                        className="text-[11px] font-semibold text-[#e74c3c] hover:underline disabled:text-slate-400 disabled:no-underline flex items-center gap-1 cursor-pointer"
+                        className="text-[11px] font-semibold text-[#2563eb] hover:underline disabled:text-slate-400 disabled:no-underline flex items-center gap-1 cursor-pointer"
                       >
                         <RotateCcw className="w-3 h-3" />
                         {resendCountdown > 0 ? `Gửi lại sau (${resendCountdown}s)` : 'Gửi lại mã'}
@@ -997,7 +997,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                         onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
                         placeholder="123456"
                         required
-                        className="w-full pl-9 pr-3 py-2 text-xs tracking-widest font-mono font-bold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#e74c3c]/30 focus:border-[#e74c3c]"
+                        className="w-full pl-9 pr-3 py-2 text-xs tracking-widest font-mono font-bold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563eb]/30 focus:border-[#2563eb]"
                       />
                     </div>
                   </div>
@@ -1012,7 +1012,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                         onChange={e => setNewPassword(e.target.value)}
                         placeholder="Tối thiểu 6 ký tự"
                         required
-                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#e74c3c]/30 focus:border-[#e74c3c]"
+                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563eb]/30 focus:border-[#2563eb]"
                       />
                     </div>
                   </div>
@@ -1027,7 +1027,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                         onChange={e => setConfirmPassword(e.target.value)}
                         placeholder="Nhập lại mật khẩu mới"
                         required
-                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#e74c3c]/30 focus:border-[#e74c3c]"
+                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563eb]/30 focus:border-[#2563eb]"
                       />
                     </div>
                   </div>
@@ -1035,7 +1035,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full mt-2 py-2.5 bg-[#e74c3c] hover:bg-[#c0392b] text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
+                    className="w-full mt-2 py-2.5 bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
                   >
                     {loading ? 'Đang cập nhật...' : 'Xác nhận Đổi Mật Khẩu'}
                     <ArrowRight className="w-4 h-4" />

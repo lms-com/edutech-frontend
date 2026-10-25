@@ -89,7 +89,7 @@ export const PaymentWaitingModal: React.FC<PaymentWaitingModalProps> = ({
             </div>
             <div className="flex items-center justify-between border-t border-slate-100 pt-2">
               <span className="text-slate-500">Tổng thanh toán:</span>
-              <span className="font-extrabold text-[#e74c3c] text-sm font-mono">
+              <span className="font-extrabold text-[#2563eb] text-sm font-mono">
                 {formatVND(course.price)}
               </span>
             </div>

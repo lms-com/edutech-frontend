@@ -570,7 +570,7 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
         </div>
 
         {/* Right Column: Sticky Pricing Card */}
-        <div className="lg:col-span-4 sticky top-24 space-y-4">
+        <div className="lg:col-span-4 sticky top-20 space-y-4">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
             <CourseThumbnail
               src={course.thumbnail}
@@ -583,7 +583,7 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                 {promoResult?.valid && promoResult.finalPrice !== undefined && promoResult.finalPrice !== null ? (
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2">
-                      <span className="text-2xl font-black text-[#e74c3c]">
+                      <span className="text-2xl font-black text-blue-600">
                         {formatVND(promoResult.finalPrice)}
                       </span>
                       <span className="text-sm font-semibold text-slate-400 line-through">
@@ -596,7 +596,7 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                     </p>
                   </div>
                 ) : (
-                  <span className="text-2xl font-black text-[#e74c3c]">
+                  <span className="text-2xl font-black text-slate-900">
                     {course.price > 0 ? formatVND(course.price) : 'Miễn phí'}
                   </span>
                 )}
@@ -624,14 +624,14 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                             void handleApplyPromo();
                           }
                         }}
-                        className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-xl uppercase font-mono tracking-wider focus:outline-none focus:border-[#e74c3c]"
+                        className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-xl uppercase font-mono tracking-wider focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-500/30"
                       />
                     </div>
                     <button
                       type="button"
                       disabled={promoValidating || !promoCode.trim()}
                       onClick={() => void handleApplyPromo()}
-                      className="px-3.5 py-2 text-xs font-bold rounded-xl bg-[#2c3e50] hover:bg-[#1a252f] text-white transition disabled:opacity-50 cursor-pointer flex items-center gap-1 shrink-0"
+                      className="px-3.5 py-2 text-xs font-bold rounded-xl bg-slate-800 hover:bg-slate-900 text-white transition disabled:opacity-50 cursor-pointer flex items-center gap-1 shrink-0"
                     >
                       {promoValidating ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Áp dụng'}
                     </button>
@@ -674,7 +674,7 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                   <button
                     disabled={isCheckingOut}
                     onClick={handleCheckoutVNPay}
-                    className="w-full py-3.5 px-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-xl shadow-indigo-900/20 transition-all hover:scale-[1.01] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    className="w-full py-3.5 px-4 rounded-2xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-sm shadow-xl shadow-blue-900/25 transition-all hover:scale-[1.01] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                   >
                     {isCheckingOut ? <span>Đang tạo đơn hàng...</span> : <><ShieldCheck className="w-5 h-5" /><span>Đăng ký và thanh toán VNPay</span></>}
                   </button>

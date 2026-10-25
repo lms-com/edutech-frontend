@@ -159,7 +159,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                         onClick={() => onEnterLearningRoom(course)}
                         className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-[#2c3e50] hover:bg-[#1a252f] text-white text-xs font-bold cursor-pointer"
                       >
-                        <PlayCircle className="w-4 h-4 text-[#e74c3c]" /> Tiếp tục học
+                        <PlayCircle className="w-4 h-4 text-[#2563eb]" /> Tiếp tục học
                       </button>
                       <button
                         type="button"
@@ -230,12 +230,12 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
         <div className="space-y-6 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm h-fit">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <span className="font-bold text-sm text-[#2c3e50] flex items-center gap-2">
-              <SlidersHorizontal className="w-4 h-4 text-[#e74c3c]" />
+              <SlidersHorizontal className="w-4 h-4 text-[#2563eb]" />
               Bộ lọc
             </span>
             <button
               onClick={resetFilters}
-              className="text-[11px] text-[#e74c3c] hover:underline font-semibold cursor-pointer"
+              className="text-[11px] text-[#2563eb] hover:underline font-semibold cursor-pointer"
             >
               Đặt lại
             </button>
@@ -253,7 +253,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                     name="level"
                     checked={selectedLevel === level}
                     onChange={() => setSelectedLevel(level)}
-                    className="accent-[#e74c3c]"
+                    className="accent-[#2563eb]"
                   />
                   <span>{level}</span>
                 </label>
@@ -277,7 +277,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                     name="price"
                     checked={priceFilter === item.key}
                     onChange={() => setPriceFilter(item.key as 'ALL' | 'PAID' | 'FREE')}
-                    className="accent-[#e74c3c]"
+                    className="accent-[#2563eb]"
                   />
                   <span>{item.label}</span>
                 </label>

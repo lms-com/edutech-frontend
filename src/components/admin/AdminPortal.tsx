@@ -1471,7 +1471,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBac
                     {dev.userFullName && (
                       <div>Họ tên: <span className="text-slate-700 font-sans">{dev.userFullName}</span></div>
                     )}
-                    <div className="truncate">FP: <span className="text-slate-600 font-mono" title={dev.deviceFingerprint || dev.deviceId}>{(dev.deviceFingerprint || dev.deviceId).slice(0, 16)}...</span></div>
+                    <div className="truncate text-slate-500 font-sans">Mã phiên: <span className="text-slate-700 font-mono text-[10px]" title={dev.deviceFingerprint || dev.deviceId}>{(dev.deviceFingerprint || dev.deviceId).slice(0, 16)}...</span></div>
                     <div className="text-slate-400 font-sans mt-2 flex items-center gap-1">
                       <span>Đăng nhập: {dev.lastActive}</span>
                     </div>
@@ -1558,7 +1558,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBac
 
           {refundLoading ? (
             <div className="py-16 flex flex-col items-center justify-center text-slate-400 gap-2">
-              <Loader2 className="w-7 h-7 animate-spin text-[#e74c3c]" />
+              <Loader2 className="w-7 h-7 animate-spin text-blue-600" />
               <p className="text-xs font-medium">Đang tải danh sách khiếu nại hoàn tiền...</p>
             </div>
           ) : refundList.length === 0 ? (
@@ -1652,7 +1652,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPreviewCourse, onBac
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <div className="flex items-center gap-2 min-w-0">
-                                  <BookOpen className="w-4 h-4 text-[#e74c3c] shrink-0" />
+                                  <BookOpen className="w-4 h-4 text-blue-600 shrink-0" />
                                   <span className="font-semibold text-slate-800 truncate" title={item.courseName}>
                                     {item.courseName}
                                   </span>

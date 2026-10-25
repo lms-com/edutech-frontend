@@ -604,7 +604,7 @@ export default function App() {
         <div className="fixed top-20 right-5 z-60 max-w-sm w-full bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200/90 p-4 animate-in slide-in-from-right duration-300">
           <div className="flex items-start gap-3">
             <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
-              <Bell className="w-4 h-4 text-[#e74c3c]" />
+              <Bell className="w-4 h-4 text-blue-600" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between">

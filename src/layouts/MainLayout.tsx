@@ -63,7 +63,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-4 gap-8">
           <div>
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-[#e74c3c] flex items-center justify-center font-bold text-white shadow-md">
+              <div className="w-8 h-8 rounded-lg bg-[#2563eb] flex items-center justify-center font-bold text-white shadow-md">
                 E
               </div>
               <span className="text-xl font-bold text-white tracking-tight">EduTech LMS</span>
@@ -101,7 +101,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
             {showInstructorPortal ? (
               <button
                 onClick={() => onSelectPortal('instructor')}
-                className="px-4 py-2 rounded-lg bg-[#e74c3c] hover:bg-[#c0392b] text-white text-xs font-semibold shadow-md transition-all cursor-pointer"
+                className="px-4 py-2 rounded-lg bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-semibold shadow-md transition-all cursor-pointer"
               >
                 Mở Instructor Studio
               </button>

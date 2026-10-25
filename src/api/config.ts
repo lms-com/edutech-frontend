@@ -5,4 +5,4 @@
  * axios và SSE (EventSource) bắt buộc phải trỏ cùng một Gateway.
  * Ghi đè khi triển khai bằng biến môi trường VITE_API_BASE_URL.
  */
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.PROD ? '' : 'http://localhost:8080');

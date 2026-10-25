@@ -1,3 +1,4 @@
+import Hls from 'hls.js';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { 
   Course, 
@@ -8,6 +9,7 @@ import {
   RevenueChartPoint
 } from '../../types';
 import courseApi from '../../api/courseApi';
+import mediaApi from '../../api/mediaApi';
 import payoutApi from '../../api/payoutApi';
 import instructorAnalyticsApi from '../../api/instructorAnalyticsApi';
 import promotionApi, { type PromotionDto, type CreatePromotionPayload } from '../../api/promotionApi';
@@ -52,6 +54,9 @@ import {
   Tag,
   Link2,
   Unlink,
+  Play,
+  X,
+  Film,
 } from 'lucide-react';
 
 interface InstructorStudioProps {
@@ -66,6 +71,178 @@ const STATUS_CONFIG: Record<string, { label: string; badge: string }> = {
   PENDING: { label: 'Chờ duyệt', badge: 'bg-amber-100 text-amber-900 border-amber-300' },
   PUBLISHED: { label: 'Đã xuất bản', badge: 'bg-emerald-100 text-emerald-900 border-emerald-300' },
   REJECTED: { label: 'Bị từ chối', badge: 'bg-rose-100 text-rose-900 border-rose-300' },
+};
+
+
+interface VideoHlsPreviewModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  mediaId: string;
+  lessonTitle?: string;
+}
+
+const VideoHlsPreviewModal: React.FC<VideoHlsPreviewModalProps> = ({ isOpen, onClose, mediaId, lessonTitle }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!isOpen || !mediaId) return;
+    setError(null);
+    setLoading(true);
+
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+
+    // Direct HLS view endpoint on media-service via gateway
+    const isHttp = mediaId.startsWith('http://') || mediaId.startsWith('https://');
+    const isM3u8 = mediaId.includes('.m3u8') || mediaId.includes('/view');
+    const isDirectMp4 = isHttp && !isM3u8;
+
+    if (isDirectMp4) {
+      // Trường hợp video là link MP4 trực tiếp ngoài (như seed data Google Cloud)
+      video.src = mediaId;
+      video.onloadeddata = () => {
+        setLoading(false);
+        video.play().catch(e => console.log('Autoplay muted:', e));
+      };
+      video.onerror = () => {
+        setError('Không thể phát video từ đường dẫn trực tiếp: ' + mediaId);
+        setLoading(false);
+      };
+      return;
+    }
+
+    // Direct HLS view endpoint on media-service via gateway or external m3u8
+    const streamUrl = isHttp ? mediaId : `/media-service/api/v1/media/${mediaId}/view`;
+
+    if (Hls.isSupported()) {
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        xhrSetup: (xhr, url) => {
+          // Không gửi Authorization / Fingerprint header tới MinIO port 9000
+          if (!url.includes(':9000') && !url.includes('.s3.')) {
+            const token = localStorage.getItem('access_token');
+            if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+            const fp = sessionStorage.getItem('device_fingerprint');
+            if (fp) xhr.setRequestHeader('X-Device-Fingerprint', fp);
+          }
+        },
+      });
+      hls.loadSource(streamUrl);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        setLoading(false);
+        video.play().catch(e => console.log('Autoplay muted / pending user click:', e));
+      });
+
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (data.fatal) {
+          console.error('Lỗi khi tải stream HLS:', data);
+          setError('Không thể kết nối hoặc giải mã luồng HLS AES-128. Vui lòng đảm bảo worker đã xử lý xong.');
+          setLoading(false);
+        }
+      });
+
+      hlsRef.current = hls;
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = streamUrl;
+      setLoading(false);
+    } else {
+      setError('Trình duyệt của bạn không hỗ trợ phát luồng HLS.');
+      setLoading(false);
+    }
+
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+    };
+  }, [isOpen, mediaId]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col">
+        {/* Header */}
+        <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+              <Play className="w-4 h-4 fill-current" />
+            </div>
+            <div>
+              <h4 className="text-white text-sm font-bold flex items-center gap-2">
+                Xem thử Video HLS
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30 font-mono">
+                  AES-128
+                </span>
+              </h4>
+              <p className="text-slate-400 text-xs truncate max-w-md">
+                {lessonTitle ? `Bài học: ${lessonTitle}` : `Media ID: ${mediaId}`}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Video Player */}
+        <div className="relative aspect-video bg-black flex items-center justify-center">
+          {loading && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-400 bg-slate-950/60 z-10">
+              <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
+              <span className="text-xs">Đang nạp luồng video HLS mã hóa...</span>
+            </div>
+          )}
+          {error ? (
+            <div className="p-6 text-center text-rose-400 space-y-2">
+              <AlertCircle className="w-8 h-8 mx-auto" />
+              <p className="text-xs font-semibold">{error}</p>
+              <p className="text-[11px] text-slate-400">Vui lòng đảm bảo worker đã hoàn tất mã hóa và lưu trữ trên MinIO.</p>
+            </div>
+          ) : (
+            <video
+              ref={videoRef}
+              controls
+              playsInline
+              className="w-full h-full object-contain"
+            />
+          )}
+        </div>
+
+        {/* Footer info */}
+        <div className="px-5 py-3 bg-slate-950 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1 text-emerald-400">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Chuẩn phát: HLS (.m3u8)
+            </span>
+            <span>•</span>
+            <span>Bảo mật: Mã hóa khóa AES-128 động</span>
+          </div>
+          <button
+            onClick={onClose}
+            className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium transition cursor-pointer"
+          >
+            Đóng
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export const InstructorStudio: React.FC<InstructorStudioProps> = ({
@@ -117,10 +294,26 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
   const [editThumbnailUrl, setEditThumbnailUrl] = useState(initialCourse.thumbnail || '');
   const [savingSettings, setSavingSettings] = useState(false);
 
-  // Video Upload Simulation State
+  // Video Upload & HLS Pipeline State
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadStatus, setUploadStatus] = useState<'IDLE' | 'GETTING_PRESIGNED' | 'UPLOADING' | 'FFMPEG_PROCESSING' | 'COMPLETED'>('IDLE');
+  const [uploadStatus, setUploadStatus] = useState<'IDLE' | 'GETTING_PRESIGNED' | 'UPLOADING' | 'FFMPEG_PROCESSING' | 'COMPLETED' | 'ERROR'>('IDLE');
+  const [selectedTargetLessonId, setSelectedTargetLessonId] = useState<string>('');
   const [selectedLessonTitle, setSelectedLessonTitle] = useState('Bài học');
+  const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [lastUploadedMediaId, setLastUploadedMediaId] = useState<string | null>(null);
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [assigningLessonId, setAssigningLessonId] = useState<string>('');
+  const [isAssigning, setIsAssigning] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
 
   // Payout & Wallet State
   const [payoutAmount, setPayoutAmount] = useState('500000');
@@ -498,25 +691,118 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
     }
   };
 
-  // Handle Video Upload Simulation
-  const handleSimulateUpload = () => {
+  // Handle Assigning Existing Media to a Lesson
+  const handleAssignVideoToLesson = async (lessonId: string, mediaId: string) => {
+    if (!lessonId || !mediaId) return;
+    setIsAssigning(true);
+    try {
+      await courseApi.updateLessonContent(lessonId, { videoUrl: mediaId });
+      setSections(prevSections =>
+        prevSections.map(sec => ({
+          ...sec,
+          lessons: (sec.lessons || []).map(l =>
+            l.id === lessonId ? { ...l, videoUrl: mediaId } : l
+          ),
+        }))
+      );
+      showSuccess('Đã gán video vào bài học thành công!');
+      await loadCourseData();
+    } catch (err: any) {
+      console.error('Lỗi khi gán video:', err);
+      setUploadError('Không thể gán video vào bài học: ' + (err?.message || 'Lỗi server'));
+    } finally {
+      setIsAssigning(false);
+    }
+  };
+
+  // Handle Real Video Upload & HLS AES-128 Pipeline
+  const handleRealUpload = async () => {
+    if (!selectedVideoFile) {
+      setUploadError('Vui lòng chọn một file video (.mp4, .mov, .mkv, v.v.) từ thiết bị.');
+      return;
+    }
+
+    setUploadError(null);
+    setUploadProgress(0);
     setUploadStatus('GETTING_PRESIGNED');
-    setUploadProgress(10);
-    setTimeout(() => {
+
+    try {
+      // 1. Xin cấp Presigned Upload URL từ media-service
+      const presigned = await mediaApi.getPresignedUploadUrl(
+        selectedVideoFile.name,
+        selectedVideoFile.type || 'video/mp4',
+        selectedVideoFile.size
+      );
+
+      const mediaId = presigned.mediaId;
+      setLastUploadedMediaId(mediaId);
+
+      // 2. Upload file trực tiếp lên MinIO Storage qua presigned URL
       setUploadStatus('UPLOADING');
-      let currentProg = 10;
-      const interval = setInterval(() => {
-        currentProg += 15;
-        setUploadProgress(currentProg);
-        if (currentProg >= 100) {
-          clearInterval(interval);
-          setUploadStatus('FFMPEG_PROCESSING');
-          setTimeout(() => {
+      await mediaApi.uploadDirectToMinIO(presigned.uploadUrl, selectedVideoFile, (pct) => {
+        setUploadProgress(pct);
+      });
+
+      // 3. Xác nhận upload xong để media-service bắn message sang RabbitMQ cho Video-Worker
+      setUploadStatus('FFMPEG_PROCESSING');
+      setUploadProgress(100);
+      await mediaApi.confirmUpload(mediaId);
+
+      // 4. Polling kiểm tra tiến trình worker xử lý FFmpeg & bẻ HLS AES-128
+      let attempts = 0;
+      const maxAttempts = 60; // tối đa 2.5 phút
+      const pollTimer = setInterval(async () => {
+        attempts++;
+        try {
+          const statusRes = await mediaApi.getMediaStatus(mediaId);
+          if (statusRes.status === 'COMPLETED') {
+            clearInterval(pollTimer);
             setUploadStatus('COMPLETED');
-          }, 2000);
+
+            // 5. Nếu giảng viên chọn bài học, tự động cập nhật bài học với videoUrl = mediaId
+            if (selectedTargetLessonId) {
+              try {
+                await courseApi.updateLessonContent(selectedTargetLessonId, {
+                  videoUrl: mediaId,
+                  title: selectedLessonTitle || undefined,
+                });
+                // Cập nhật ngay lập tức vào state sections để hiển thị badge 'Có video' lập tức
+                setSections(prevSections =>
+                  prevSections.map(sec => ({
+                    ...sec,
+                    lessons: (sec.lessons || []).map(l =>
+                      l.id === selectedTargetLessonId ? { ...l, videoUrl: mediaId, title: selectedLessonTitle || l.title } : l
+                    ),
+                  }))
+                );
+                showSuccess('Đã tải video lên MinIO, mã hóa HLS và gán vào bài học thành công!');
+                await loadCourseData();
+              } catch (linkErr: any) {
+                console.error('Lỗi khi cập nhật bài học với video mới:', linkErr);
+                setUploadError('Video đã mã hóa HLS trên MinIO nhưng chưa thể cập nhật bài học: ' + (linkErr?.message || 'Lỗi server'));
+              }
+            } else {
+              showSuccess('Video đã tải lên và mã hóa HLS thành công trên MinIO! Vui lòng chọn bài học để gán video.');
+            }
+          } else if (statusRes.status === 'FAILED') {
+            clearInterval(pollTimer);
+            setUploadStatus('ERROR');
+            setUploadError('Worker FFmpeg gặp lỗi khi bẻ chunk hoặc mã hóa video.');
+          } else if (attempts >= maxAttempts) {
+            clearInterval(pollTimer);
+            setUploadStatus('ERROR');
+            setUploadError('Thời gian xử lý video quá lâu. Vui lòng kiểm tra lại sau.');
+          }
+        } catch (pollErr: any) {
+          console.warn('Đang chờ worker hoàn tất...', pollErr);
         }
-      }, 300);
-    }, 800);
+      }, 2500);
+
+    } catch (err: any) {
+      console.error('Lỗi khi tải video lên:', err);
+      setUploadStatus('ERROR');
+      setUploadError(err.message || 'Đã xảy ra lỗi khi tải video lên MinIO.');
+    }
   };
 
   const handleCreatePayoutRequest = async (e: React.FormEvent) => {
@@ -786,8 +1072,36 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
                           )}
                         </div>
 
-                        <div className="flex items-center gap-2.5">
+                        <div className="flex items-center gap-2">
                           <span className="text-slate-400 font-mono text-[11px]">{lesson.durationMinutes} phút</span>
+                          {lesson.videoUrl && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setLastUploadedMediaId(lesson.videoUrl || '');
+                                setSelectedLessonTitle(lesson.title);
+                                setPreviewModalOpen(true);
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition border border-emerald-200 cursor-pointer"
+                              title="Xem thử video của bài học này"
+                            >
+                              <Play className="w-3 h-3 fill-current" />
+                              <span>Xem</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedTargetLessonId(lesson.id);
+                              setSelectedLessonTitle(lesson.title);
+                              setActiveTab('upload');
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition border border-indigo-200 cursor-pointer"
+                            title="Tải video lên cho bài học này"
+                          >
+                            <UploadCloud className="w-3 h-3" />
+                            <span>{lesson.videoUrl ? 'Đổi video' : 'Tải video'}</span>
+                          </button>
                           <button
                             onClick={() => setAttachmentModalLesson({ id: lesson.id, title: lesson.title })}
                             className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:text-[#e74c3c] bg-slate-100 hover:bg-rose-50 rounded-lg transition border border-slate-200 hover:border-rose-200 cursor-pointer"
@@ -1329,72 +1643,286 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
         </div>
       )}
 
-      {/* TAB 4: MINIO VIDEO UPLOAD DEMO */}
+      {/* TAB 4: MINIO VIDEO UPLOAD (REAL HLS PIPELINE) */}
       {activeTab === 'upload' && (
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6 max-w-3xl">
-          <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
-            <strong>Chế độ mô phỏng pipeline:</strong> Quy trình cấp Presigned URL và chuyển mã FFmpeg dưới đây đang mô phỏng luồng tải video lên cụm MinIO Storage.
-          </div>
-
-          <div>
-            <h3 className="font-bold text-base text-[#2c3e50]">Mô phỏng Tải Video Lên Cụm MinIO Storage & Mã Hóa HLS AES-128</h3>
-            <p className="text-xs text-slate-500 mt-1">
-              Client gửi yêu cầu nhận Presigned URL, đẩy trực tiếp lên MinIO S3 bucket, FFmpeg Worker bẻ mảnh HLS và mã hóa AES-128.
-            </p>
-          </div>
-
-          <div className="space-y-4">
+        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6 max-w-3xl">
+          {/* Header */}
+          <div className="flex items-start justify-between pb-4 border-b border-slate-100">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Tiêu đề bài giảng cập nhật video:
-              </label>
-              <input
-                type="text"
-                value={selectedLessonTitle}
-                onChange={e => setSelectedLessonTitle(e.target.value)}
-                className="w-full p-2.5 border border-slate-300 rounded-xl text-xs focus:outline-none focus:border-[#2c3e50]"
-              />
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <Sparkles className="w-3.5 h-3.5" /> Pipeline Thật (MinIO + RabbitMQ + FFmpeg)
+              </span>
+              <h3 className="font-bold text-lg text-[#2c3e50] mt-1">Tải Video Lên Cụm MinIO Storage & Mã Hóa HLS</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Cấp Presigned URL trực tiếp từ Media Service, đẩy lên MinIO S3 bucket, Worker FFmpeg tự động bẻ chunk HLS và mã hóa bảo mật AES-128.
+              </p>
+            </div>
+          </div>
+
+          {/* Banner thông báo bài học mục tiêu */}
+          {selectedTargetLessonId ? (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="text-xs text-emerald-800 font-semibold">
+                  Mục tiêu tải lên: <span className="font-bold underline">{selectedLessonTitle}</span>
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('curriculum')}
+                className="text-[11px] text-emerald-700 hover:text-emerald-900 underline font-medium cursor-pointer"
+              >
+                Đổi bài học khác
+              </button>
+            </div>
+          ) : (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-2 text-xs text-amber-800">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Vui lòng chọn bài học ở mục bên dưới để hệ thống tự động gán video sau khi mã hóa xong.</span>
+            </div>
+          )}
+
+          {/* Chọn bài học để gắn video */}
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  1. Chọn bài học cần gắn video:
+                </label>
+                <select
+                  value={selectedTargetLessonId}
+                  onChange={(e) => {
+                    const lId = e.target.value;
+                    setSelectedTargetLessonId(lId);
+                    for (const s of sections) {
+                      const found = s.lessons?.find(l => l.id === lId);
+                      if (found) {
+                        setSelectedLessonTitle(found.title);
+                        break;
+                      }
+                    }
+                  }}
+                  className="w-full p-2.5 border border-slate-300 rounded-xl text-xs bg-white text-slate-800 focus:outline-none focus:border-[#2c3e50]"
+                >
+                  <option value="">-- Chưa gắn vào bài học nào (chỉ upload) --</option>
+                  {sections.map(s => (
+                    <optgroup key={s.id} label={`Chương: ${s.title}`}>
+                      {s.lessons?.map(l => (
+                        <option key={l.id} value={l.id}>
+                          {l.title} {l.videoUrl ? '(Đã có video)' : '(Chưa có video)'}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Tên bài giảng hiển thị:
+                </label>
+                <input
+                  type="text"
+                  value={selectedLessonTitle}
+                  onChange={e => setSelectedLessonTitle(e.target.value)}
+                  placeholder="Nhập hoặc đổi tên bài học..."
+                  className="w-full p-2.5 border border-slate-300 rounded-xl text-xs focus:outline-none focus:border-[#2c3e50]"
+                />
+              </div>
             </div>
 
-            <div 
-              onClick={() => {
-                if (uploadStatus === 'IDLE' || uploadStatus === 'COMPLETED') {
-                  handleSimulateUpload();
+            {/* Hidden native file input */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="video/mp4,video/quicktime,video/x-matroska,video/webm"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  setSelectedVideoFile(file);
+                  setUploadError(null);
+                  setUploadStatus('IDLE');
+                  setUploadProgress(0);
                 }
               }}
-              className="border-2 border-dashed border-slate-300 hover:border-[#e74c3c] bg-slate-50 p-8 rounded-2xl text-center cursor-pointer transition-all space-y-3"
+              className="hidden"
+            />
+
+            {/* Dropzone container */}
+            <div 
+              onClick={() => {
+                if (uploadStatus === 'IDLE' || uploadStatus === 'COMPLETED' || uploadStatus === 'ERROR') {
+                  fileInputRef.current?.click();
+                }
+              }}
+              className={`border-2 border-dashed p-6 sm:p-8 rounded-2xl text-center cursor-pointer transition-all space-y-3 ${
+                selectedVideoFile 
+                  ? 'border-emerald-500 bg-emerald-50/40' 
+                  : 'border-slate-300 hover:border-[#e74c3c] bg-slate-50'
+              }`}
             >
-              <div className="w-14 h-14 rounded-full bg-slate-200 mx-auto flex items-center justify-center text-[#2c3e50]">
-                <UploadCloud className="w-7 h-7" />
+              <div className={`w-14 h-14 rounded-full mx-auto flex items-center justify-center transition ${
+                selectedVideoFile ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-[#2c3e50]'
+              }`}>
+                {selectedVideoFile ? <Film className="w-7 h-7" /> : <UploadCloud className="w-7 h-7" />}
               </div>
               <div>
-                <p className="font-bold text-xs md:text-sm text-[#2c3e50]">
-                  Bấm để bắt đầu mô phỏng tải video lên MinIO
-                </p>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Tự động phân mảnh chuẩn HLS .m3u8 & AES-128
-                </p>
+                {selectedVideoFile ? (
+                  <>
+                    <p className="font-bold text-sm text-emerald-900 truncate max-w-md mx-auto">
+                      {selectedVideoFile.name}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Dung lượng: <span className="font-semibold text-slate-700">{formatFileSize(selectedVideoFile.size)}</span> • Bấm để chọn file khác
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-bold text-xs md:text-sm text-[#2c3e50]">
+                      Bấm để chọn file video thật từ máy tính
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Hỗ trợ MP4, MOV, MKV, WebM • Tự động mã hóa AES-128 & phát HLS
+                    </p>
+                  </>
+                )}
               </div>
             </div>
 
+            {/* Error Message */}
+            {uploadError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{uploadError}</span>
+              </div>
+            )}
+
+            {/* Action Button: Start Upload */}
+            {uploadStatus === 'IDLE' || uploadStatus === 'ERROR' ? (
+              <button
+                type="button"
+                onClick={handleRealUpload}
+                disabled={!selectedVideoFile}
+                className="w-full py-3 bg-[#e74c3c] hover:bg-[#c0392b] disabled:bg-slate-300 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+              >
+                <UploadCloud className="w-4 h-4" />
+                <span>Bắt Đầu Tải Lên MinIO & Chuyển Mã HLS</span>
+              </button>
+            ) : null}
+
+            {/* Progress & Status Tracker */}
             {uploadStatus !== 'IDLE' && (
               <div className="p-4 bg-slate-900 text-white rounded-xl space-y-3 font-mono text-xs">
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-300">
-                    {uploadStatus === 'GETTING_PRESIGNED' && '1/3 Đang xin Presigned URL từ media-service...'}
-                    {uploadStatus === 'UPLOADING' && `2/3 Đang đẩy trực tiếp lên MinIO S3 bucket (${uploadProgress}%)...`}
-                    {uploadStatus === 'FFMPEG_PROCESSING' && '3/3 Worker FFmpeg đang bẻ chunk HLS và mã hóa AES-128...'}
-                    {uploadStatus === 'COMPLETED' && '✓ Video đã mã hóa thành công & sẵn sàng phát HLS!'}
+                  <span className="text-slate-300 flex items-center gap-2">
+                    {uploadStatus === 'GETTING_PRESIGNED' && (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                        <span>1/3 Đang xin Presigned URL từ media-service...</span>
+                      </>
+                    )}
+                    {uploadStatus === 'UPLOADING' && (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+                        <span>2/3 Đang tải lên MinIO ({uploadProgress}%)...</span>
+                      </>
+                    )}
+                    {uploadStatus === 'FFMPEG_PROCESSING' && (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                        <span>3/3 Worker FFmpeg đang bẻ chunk HLS và mã hóa AES-128...</span>
+                      </>
+                    )}
+                    {uploadStatus === 'COMPLETED' && (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-emerald-400 font-bold">Video đã mã hóa HLS thành công & sẵn sàng phát!</span>
+                      </>
+                    )}
+                    {uploadStatus === 'ERROR' && (
+                      <>
+                        <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+                        <span className="text-rose-400">Quá trình tải lên hoặc xử lý gặp lỗi.</span>
+                      </>
+                    )}
                   </span>
                   <span className="text-emerald-400 font-bold">{uploadProgress}%</span>
                 </div>
 
                 <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
                   <div 
-                    className="h-full bg-emerald-500 transition-all duration-300"
+                    className={`h-full transition-all duration-300 ${
+                      uploadStatus === 'COMPLETED' ? 'bg-emerald-500' : uploadStatus === 'ERROR' ? 'bg-rose-500' : 'bg-indigo-500'
+                    }`}
                     style={{ width: `${uploadProgress}%` }}
                   />
                 </div>
+
+                {uploadStatus === 'COMPLETED' && lastUploadedMediaId && (
+                  <div className="pt-3 border-t border-slate-800 space-y-3 font-sans">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                      <div>
+                        <p className="text-slate-400 text-[11px]">Media ID tạo bởi hệ thống:</p>
+                        <code className="text-emerald-400 text-xs font-mono font-bold">{lastUploadedMediaId}</code>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewModalOpen(true)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition cursor-pointer"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                          <span>Xem thử Video HLS</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUploadStatus('IDLE');
+                            setSelectedVideoFile(null);
+                            setUploadProgress(0);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium transition cursor-pointer"
+                        >
+                          <span>Tải video khác</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Cho phép gán vào bài học nếu lúc upload chưa chọn */}
+                    {!selectedTargetLessonId && (
+                      <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 space-y-2">
+                        <p className="text-xs text-slate-300 font-semibold">Gán video này vào một bài học trong khóa:</p>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={assigningLessonId}
+                            onChange={e => setAssigningLessonId(e.target.value)}
+                            className="p-1.5 border border-slate-700 rounded-lg text-xs bg-slate-900 text-slate-200 focus:outline-none flex-1"
+                          >
+                            <option value="">-- Chọn bài học để gán --</option>
+                            {sections.map(s => (
+                              <optgroup key={s.id} label={`Chương: ${s.title}`}>
+                                {s.lessons?.map(l => (
+                                  <option key={l.id} value={l.id}>
+                                    {l.title} {l.videoUrl ? '(Đã có video)' : '(Chưa có video)'}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            disabled={!assigningLessonId || isAssigning}
+                            onClick={() => handleAssignVideoToLesson(assigningLessonId, lastUploadedMediaId)}
+                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 text-white rounded-lg text-xs font-bold transition cursor-pointer"
+                          >
+                            {isAssigning ? 'Đang gán...' : 'Gán vào bài'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1946,6 +2474,14 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
         onClose={() => setAttachmentModalLesson(null)}
         lessonId={attachmentModalLesson?.id || ''}
         lessonTitle={attachmentModalLesson?.title || ''}
+      />
+
+      {/* Video HLS Preview Modal */}
+      <VideoHlsPreviewModal
+        isOpen={previewModalOpen}
+        onClose={() => setPreviewModalOpen(false)}
+        mediaId={lastUploadedMediaId || ''}
+        lessonTitle={selectedLessonTitle}
       />
     </div>
   );

@@ -77,7 +77,13 @@ export const PaymentResultView: React.FC<PaymentResultViewProps> = ({
         if (typeof BroadcastChannel !== 'undefined') {
           const bc = new BroadcastChannel('edutech_payment');
           bc.postMessage({ type: 'VNPAY_PAYMENT_COMPLETED', result });
-          bc.close();
+          setTimeout(() => {
+            try {
+              bc.close();
+            } catch {
+              // ignore
+            }
+          }, 1000);
         }
       } catch (e) {
         console.warn('Không thể gửi postMessage sang tab gốc:', e);

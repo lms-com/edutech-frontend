@@ -267,7 +267,7 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
       setIsWaitingPaymentOpen(true);
 
       // Mở cổng VNPay ở Tab mới (Phương án 1) - Giữ tab hiện tại không bị ảnh hưởng URL history
-      window.open(response.paymentUrl, '_blank', 'noopener,noreferrer');
+      window.open(response.paymentUrl, '_blank');
     } catch (err: any) {
       setCheckoutError(err?.message || 'Không tạo được đơn hàng. Kiểm tra bạn đã đăng nhập chưa.');
     } finally {

@@ -390,9 +390,43 @@ export default function App() {
           isRead: false,
         };
         setNotifications((prev) => [newNotif, ...prev]);
+        setActiveNotificationToast(newNotif);
       }
     }
   }, [loadMyEnrollments]);
+
+  // Lắng nghe kết quả thanh toán từ các tab khác (BroadcastChannel) để đồng bộ thông báo và quyền học
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('edutech_payment');
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'VNPAY_PAYMENT_COMPLETED') {
+          const res = event.data.result as VNPayPaymentResult;
+          void loadMyEnrollments();
+          void loadNotifications();
+          if (res?.isSuccess) {
+            const toast: NotificationItem = {
+              id: `bc_pay_${Date.now()}`,
+              title: 'Thanh toán thành công',
+              message: res.message || 'Khóa học của bạn đã được kích hoạt thành công!',
+              type: 'PAYMENT',
+              timestamp: 'Vừa xong',
+              isRead: false,
+            };
+            setNotifications((prev) => [toast, ...prev]);
+            setActiveNotificationToast(toast);
+          }
+        }
+      };
+    } catch (e) {
+      console.warn('Lỗi lắng nghe BroadcastChannel:', e);
+    }
+    return () => {
+      if (bc) bc.close();
+    };
+  }, [loadMyEnrollments, loadNotifications]);
 
   /**
    * Điểm vào cho link QR trên chứng chỉ: /?verify=<qrCodeHash>

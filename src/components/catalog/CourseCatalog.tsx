@@ -113,7 +113,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
             <div className="pt-2 flex flex-wrap items-center gap-3">
               <button
                 onClick={() => onSelectCourse(featuredCourse)}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#e74c3c] hover:bg-[#c0392b] text-white text-xs md:text-sm font-bold shadow-lg transition-all hover:scale-105 cursor-pointer"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs md:text-sm font-bold shadow-lg shadow-indigo-900/30 transition-all hover:scale-105 cursor-pointer"
               >
                 <PlayCircle className="w-4 h-4" />
                 Khám phá khóa học tiêu biểu
@@ -297,9 +297,21 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
           </div>
 
           {loading && (
-            <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Đang tải danh sách khóa học...
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs animate-pulse">
+                  <div className="aspect-video bg-slate-200" />
+                  <div className="p-5 space-y-3">
+                    <div className="w-20 h-4 bg-slate-200 rounded-md" />
+                    <div className="w-full h-5 bg-slate-200 rounded-md" />
+                    <div className="w-3/4 h-3 bg-slate-100 rounded-md" />
+                    <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                      <div className="w-24 h-5 bg-slate-200 rounded-md" />
+                      <div className="w-16 h-4 bg-slate-200 rounded-md" />
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
@@ -325,12 +337,24 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
           )}
 
           {!loading && !error && catalogCourses.length === 0 && (
-            <div className="p-10 text-center text-sm text-slate-500 bg-white rounded-2xl border border-dashed border-slate-300">
-              {courses.length === 0
-                ? 'Chưa có khóa học nào được xuất bản.'
-                : filteredCourses.length === 0
-                  ? 'Không có khóa học nào khớp bộ lọc hiện tại.'
-                : 'Bạn đã ghi danh tất cả khóa học khớp bộ lọc.'}
+            <div className="p-12 text-center text-sm text-slate-500 bg-white rounded-3xl border border-dashed border-slate-300 space-y-3">
+              <BookOpen className="w-10 h-10 text-slate-300 mx-auto" />
+              <p className="font-semibold text-slate-700">
+                {courses.length === 0
+                  ? 'Chưa có khóa học nào được xuất bản.'
+                  : filteredCourses.length === 0
+                    ? 'Không có khóa học nào khớp bộ lọc hiện tại.'
+                  : 'Bạn đã ghi danh tất cả khóa học khớp bộ lọc.'}
+              </p>
+              {filteredCourses.length === 0 && (
+                <button
+                  onClick={resetFilters}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-xs hover:bg-indigo-100 transition cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Xóa bộ lọc và xem tất cả khóa học
+                </button>
+              )}
             </div>
           )}
 
@@ -359,13 +383,13 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                 <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
                   <div>
                     {course.category && (
-                      <span className="text-[11px] font-semibold text-[#e74c3c] uppercase tracking-wider">
+                      <span className="text-[11px] font-bold text-indigo-600 uppercase tracking-wider">
                         {course.category}
                       </span>
                     )}
                     <h3
                       onClick={() => onSelectCourse(course)}
-                      className="text-sm font-bold text-[#2c3e50] mt-1 leading-snug line-clamp-2 hover:text-[#e74c3c] cursor-pointer transition-colors"
+                      className="text-sm font-bold text-[#2c3e50] mt-1 leading-snug line-clamp-2 hover:text-indigo-600 cursor-pointer transition-colors"
                     >
                       {course.title}
                     </h3>

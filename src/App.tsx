@@ -1,5 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { PortalType, Course, Certificate, NotificationItem } from './types';
+import {
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+  useLocation,
+  useParams,
+  useSearchParams,
+} from 'react-router-dom';
+import type { PortalType, Course, Certificate, NotificationItem, VNPayPaymentResult } from './types';
 import { MainLayout } from './layouts/MainLayout';
 import { LearningLayout } from './layouts/LearningLayout';
 import { InstructorLayout } from './layouts/InstructorLayout';
@@ -19,92 +28,94 @@ import { parseVNPayCallback, cleanUrlQueryParams } from './utils/vnpayHelper';
 import { canAccessPortal } from './utils/roles';
 import { getPendingPurchase, clearPendingPurchase } from './utils/pendingPurchase';
 import { useAuthStore } from './stores/useAuthStore';
-import type { VNPayPaymentResult } from './types';
 import courseApi from './api/courseApi';
+import orderApi from './api/orderApi';
 import notificationApi from './api/notificationApi';
 import { mapCertificate } from './api/mappers/notificationMapper';
 import enrollmentApi, { type EnrollmentDto } from './api/enrollmentApi';
-import { Loader2, AlertCircle, Award, Bell, X } from 'lucide-react';
+import { Loader2, AlertCircle, Award, Bell, X, AlertTriangle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export default function App() {
-  const [currentPortal, setCurrentPortal] = useState<PortalType>('learner');
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Danh sách khóa học và danh sách ghi danh của học viên
   const [coursesList, setCoursesList] = useState<Course[]>([]);
-  const [activeCourse, setActiveCourse] = useState<Course | null>(null);
-  const [selectedInstructorCourse, setSelectedInstructorCourse] = useState<Course | null>(null);
-  const [detailCourse, setDetailCourse] = useState<Course | null>(null);
   const [coursesLoading, setCoursesLoading] = useState(true);
   const [coursesError, setCoursesError] = useState<string | null>(null);
   const [myEnrollments, setMyEnrollments] = useState<EnrollmentDto[]>([]);
   const [enrollmentsLoading, setEnrollmentsLoading] = useState(false);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState<string | null>(null);
   const [courseCache, setCourseCache] = useState<Record<string, Course>>({});
-  const [paymentCourse, setPaymentCourse] = useState<Course | null>(null);
-  const [activeEnrollment, setActiveEnrollment] = useState<EnrollmentDto | null>(null);
-  const [paymentResult, setPaymentResult] = useState<VNPayPaymentResult | null>(null);
-  const [isInLearningRoom, setIsInLearningRoom] = useState<boolean>(false);
-  const [isLearningPreview, setIsLearningPreview] = useState(false);
+
+  // Modals & Thông báo toàn cục
   const [showCertificateModal, setShowCertificateModal] = useState<boolean>(false);
   const [showOrderHistoryModal, setShowOrderHistoryModal] = useState<boolean>(false);
-  const [publicVerifyHash, setPublicVerifyHash] = useState<string>('');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
   const [activeNotificationToast, setActiveNotificationToast] = useState<NotificationItem | null>(null);
   const [certificates, setCertificates] = useState<Certificate[]>([]);
-  /** Chứng chỉ đang xem trước, chọn từ trang xác thực công khai. */
   const [certificateForPreview, setCertificateForPreview] = useState<Certificate | null>(null);
 
   const fetchCurrentUser = useAuthStore(state => state.fetchCurrentUser);
   const currentUser = useAuthStore(state => state.user);
   const isAuthenticated = useAuthStore(state => state.isAuthenticated);
 
+  // Xác định phân hệ hiện tại từ đường dẫn URL (đồng bộ chuẩn xác với URL)
+  const currentPortal: PortalType = location.pathname.startsWith('/instructor')
+    ? 'instructor'
+    : location.pathname.startsWith('/admin')
+    ? 'admin'
+    : location.pathname.startsWith('/verify') || location.pathname.startsWith('/certificates/verify')
+    ? 'public_verify'
+    : 'learner';
+
   // Khôi phục phiên đăng nhập từ token đã lưu để F5 không mất đăng nhập
   useEffect(() => {
     void fetchCurrentUser();
   }, [fetchCurrentUser]);
 
-  // Signing out or a 401 must return staff portals to the learner shell and
-  // drop any cached access to a course that was open before the session ended.
+  // Tự động chuyển hướng về trang chủ khi đăng xuất nếu đang ở phân hệ quản trị / giảng viên
   useEffect(() => {
     if (isAuthenticated) return;
-    setCurrentPortal('learner');
-    setSelectedInstructorCourse(null);
-    setActiveCourse(null);
-    setActiveEnrollment(null);
-    setIsInLearningRoom(false);
-    setIsLearningPreview(false);
-    setDetailCourse(null);
-    setPaymentCourse(null);
-    setPaymentResult(null);
-    setMyEnrollments([]);
-    setShowCertificateModal(false);
-  }, [isAuthenticated]);
+    if (location.pathname.startsWith('/instructor') || location.pathname.startsWith('/admin')) {
+      navigate('/', { replace: true });
+    }
+  }, [isAuthenticated, location.pathname, navigate]);
 
-  /**
-   * Cổng duy nhất kiểm soát việc chuyển portal: vai trò không hợp lệ thì không vào được,
-   * dù bấm từ header, footer hay sau khi đăng nhập.
-   */
+  /** Chuyển portal điều hướng qua React Router */
   const handleSelectPortal = (portal: PortalType) => {
     if (!canAccessPortal(useAuthStore.getState().user?.roles, portal)) {
       return;
     }
-    setCurrentPortal(portal);
-    setDetailCourse(null);
-    if (portal !== 'instructor') setSelectedInstructorCourse(null);
+    if (portal === 'instructor') {
+      navigate('/instructor');
+    } else if (portal === 'admin') {
+      navigate('/admin');
+    } else if (portal === 'public_verify') {
+      navigate('/verify');
+    } else {
+      navigate('/');
+    }
   };
 
+  /** Nạp danh mục khóa học */
   const loadCourses = useCallback(async () => {
     setCoursesLoading(true);
     setCoursesError(null);
     try {
-      // Lấy một trang lớn vì backend chưa hỗ trợ lọc phía server (xem CourseCatalog).
-      const page = await courseApi.getCatalogCourses({ size: 100 });
+      const page = await courseApi.getCourses();
       setCoursesList(page.items);
+      setCourseCache(prev => {
+        const next = { ...prev };
+        for (const c of page.items) {
+          if (!next[c.id]) next[c.id] = c;
+        }
+        return next;
+      });
     } catch (err: any) {
-      setCoursesError(err?.message || 'Không tải được danh sách khóa học từ máy chủ.');
-      setCoursesList([]);
+      setCoursesError(err?.message || 'Không tải được danh sách khóa học.');
     } finally {
       setCoursesLoading(false);
     }
@@ -114,72 +125,43 @@ export default function App() {
     void loadCourses();
   }, [loadCourses]);
 
+  /** Nạp danh sách ghi danh của tôi */
   const loadMyEnrollments = useCallback(async () => {
-    if (!isAuthenticated) {
+    if (!localStorage.getItem('access_token')) {
       setMyEnrollments([]);
-      setEnrollmentsLoading(false);
       return;
     }
     setEnrollmentsLoading(true);
     try {
-      const page = await enrollmentApi.getMyEnrollments({ size: 100 });
+      const page = await enrollmentApi.getMyEnrollments();
       setMyEnrollments(page.items);
-    } catch (err) {
-      // Không suy diễn rằng người dùng có quyền học khi chưa xác nhận được enrollment.
+    } catch {
       setMyEnrollments([]);
-      console.warn('Không tải được danh sách khóa học đã ghi danh:', err);
     } finally {
       setEnrollmentsLoading(false);
     }
-  }, [isAuthenticated]);
+  }, []);
 
   useEffect(() => {
     void loadMyEnrollments();
-  }, [loadMyEnrollments]);
+  }, [loadMyEnrollments, isAuthenticated]);
 
-  /**
-   * Bảo đảm có bản chi tiết (kèm chương/bài) trước khi hiển thị. Bản đã tải được
-   * giữ trong cache nên mở lại cùng khóa học không gọi API lần nữa.
-   */
-  const ensureCourseDetail = useCallback(async (course: Course): Promise<Course> => {
-    if (course.sections.length > 0) return course;
-    const cached = courseCache[course.id];
-    if (cached) return cached;
-    const detail = await courseApi.getCourseById(course.id);
+  /** Bảo đảm khóa học có đủ cấu trúc chương & bài học (cache để tránh gọi lặp) */
+  const ensureCourseDetail = useCallback(async (courseOrId: Course | string): Promise<Course> => {
+    const id = typeof courseOrId === 'string' ? courseOrId : courseOrId.id;
+    const existing = courseCache[id];
+    if (existing && existing.sections && existing.sections.length > 0) {
+      return existing;
+    }
+    const detail = await courseApi.getCourseById(id);
     setCourseCache(prev => ({ ...prev, [detail.id]: detail }));
     return detail;
   }, [courseCache]);
 
-  const openCourseDetail = async (courseOrId: Course | string) => {
-    setDetailError(null);
-    setDetailLoading(true);
-    try {
-      if (typeof courseOrId === 'string') {
-        const cached = courseCache[courseOrId];
-        if (cached) {
-          setDetailCourse(cached);
-        } else {
-          const detail = await courseApi.getCourseById(courseOrId);
-          setCourseCache(prev => ({ ...prev, [detail.id]: detail }));
-          setDetailCourse(detail);
-        }
-      } else {
-        setDetailCourse(courseOrId);
-        setDetailCourse(await ensureCourseDetail(courseOrId));
-      }
-    } catch (err: any) {
-      // API chi tiết khóa học yêu cầu đăng nhập, nên 401 là trường hợp hay gặp nhất
-      setDetailError(err?.code === 401
-        ? 'Bạn cần đăng nhập để xem chi tiết khóa học này.'
-        : err?.message || 'Không tải được chi tiết khóa học.');
-    } finally {
-      setDetailLoading(false);
-    }
-  };
-
+  /** Polling quyền học cho đến khi ACTIVE */
   const pollEnrollmentActive = async (
     courseId: string,
-    maxRetries = 5,
+    maxRetries = 6,
     delayMs = 800
   ): Promise<EnrollmentDto | null> => {
     for (let i = 0; i < maxRetries; i++) {
@@ -198,35 +180,7 @@ export default function App() {
     return null;
   };
 
-  const enterLearningRoom = async (course: Course, options: { preview?: boolean } = {}): Promise<boolean> => {
-    if (!options.preview && !isAuthenticated) {
-      setIsAuthModalOpen(true);
-      return false;
-    }
-    try {
-      // Chỉ enrollment ACTIVE mới được vào học; preview của staff là chế độ chỉ xem.
-      let enrollment: EnrollmentDto | null = null;
-      if (!options.preview) {
-        enrollment = await pollEnrollmentActive(course.id);
-        if (!enrollment || enrollment.status?.toUpperCase() !== 'ACTIVE') {
-          setCoursesError('Khóa học chưa được kích hoạt. Hãy hoàn tất thanh toán và chờ hệ thống ghi danh thành công.');
-          return false;
-        }
-        setMyEnrollments(prev => [enrollment!, ...prev.filter(item => item.courseId !== course.id)]);
-      }
-      // Chỉ tải cấu trúc chương/bài sau khi xác minh quyền học.
-      setActiveCourse(await ensureCourseDetail(course));
-      setActiveEnrollment(enrollment);
-      setIsLearningPreview(!!options.preview);
-      setIsInLearningRoom(true);
-      setCoursesError(null);
-      return true;
-    } catch (err: any) {
-      setCoursesError(err?.message || 'Không mở được phòng học.');
-      return false;
-    }
-  };
-
+  /** Đăng ký khóa học miễn phí */
   const enrollInFreeCourse = async (course: Course) => {
     if (!isAuthenticated) {
       setIsAuthModalOpen(true);
@@ -234,42 +188,10 @@ export default function App() {
     }
     const enrollment = await enrollmentApi.enrollInFreeCourse(course.id);
     setMyEnrollments(prev => [enrollment, ...prev.filter(item => item.courseId !== course.id)]);
-    await enterLearningRoom(course);
+    navigate(`/learn/${course.id}`);
   };
 
-  const selectInstructorCourse = async (course: Course) => {
-    try {
-      setSelectedInstructorCourse(await ensureCourseDetail(course));
-    } catch (err: any) {
-      setCoursesError(err?.message || 'Không tải được nội dung khóa học.');
-      setSelectedInstructorCourse(course);
-    }
-  };
-
-  /**
-   * VNPay chuyển hướng về bằng một lần nạp trang mới nên state đã mất; khôi phục
-   * khóa học đang mua từ sessionStorage để trang kết quả hiển thị đúng.
-   */
-  useEffect(() => {
-    if (!paymentResult) return;
-    const courseId = getPendingPurchase();
-    if (!courseId) return;
-
-    const fromList = coursesList.find(course => course.id === courseId);
-    if (fromList) {
-      setPaymentCourse(fromList);
-      return;
-    }
-    // Danh sách chưa tải xong thì chờ, tránh gọi API trùng
-    if (coursesLoading) return;
-
-    let cancelled = false;
-    void courseApi.getCourseById(courseId)
-      .then(course => { if (!cancelled) setPaymentCourse(course); })
-      .catch(err => console.warn('Không khôi phục được khóa học sau thanh toán:', err));
-    return () => { cancelled = true; };
-  }, [paymentResult, coursesList, coursesLoading]);
-
+  /** Tải thông báo */
   const loadNotifications = useCallback(async () => {
     if (!localStorage.getItem('access_token')) {
       setNotifications([]);
@@ -285,7 +207,6 @@ export default function App() {
     }
   }, []);
 
-  // 2. Thông báo: nạp khi đã đăng nhập, và nạp lại khi phiên đăng nhập đổi
   useEffect(() => {
     void loadNotifications();
   }, [loadNotifications, isAuthenticated]);
@@ -299,20 +220,14 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [activeNotificationToast]);
 
-  /**
-   * 3. Luồng SSE realtime.
-   * EventSource nhận định danh qua query param userId.
-   * Lắng nghe cả event mặc định lẫn custom event "NEW_NOTIFICATION" từ backend SseEmitterService.
-   */
+  /** Luồng SSE realtime cho thông báo */
   useEffect(() => {
     if (!currentUser?.id) return;
-
     const eventSource = new EventSource(notificationApi.getSseUrl(currentUser.id));
 
     const handleNewNotification = (event: MessageEvent) => {
       try {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-        // Sự kiện INIT chỉ là mở kết nối mồi, không phải thông báo mới
         if (!data?.title) return;
         const newNotif: NotificationItem = {
           id: data.id ?? `sse_${Date.now()}`,
@@ -325,7 +240,7 @@ export default function App() {
         setNotifications(prev => [newNotif, ...prev]);
         setActiveNotificationToast(newNotif);
       } catch {
-        // Bỏ qua sự kiện không parse được
+        // Bỏ qua nếu không parse được
       }
     };
 
@@ -333,7 +248,6 @@ export default function App() {
     eventSource.addEventListener('NEW_NOTIFICATION', handleNewNotification);
 
     eventSource.onerror = () => {
-      // EventSource tự thử kết nối lại; chỉ ghi log để không làm phiền người dùng
       console.warn('Luồng thông báo realtime gián đoạn, đang thử kết nối lại...');
     };
 
@@ -343,7 +257,55 @@ export default function App() {
     };
   }, [currentUser?.id]);
 
-  // 4. Chứng chỉ của tôi (cần đăng nhập)
+  /** Đồng bộ kết quả thanh toán từ các tab khác qua BroadcastChannel */
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('edutech_payment');
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'VNPAY_PAYMENT_COMPLETED') {
+          const res = event.data.result as VNPayPaymentResult;
+          void loadMyEnrollments();
+          void loadNotifications();
+          if (res?.isSuccess) {
+            const toast: NotificationItem = {
+              id: `bc_pay_${Date.now()}`,
+              title: 'Thanh toán thành công',
+              message: res.message || 'Khóa học của bạn đã được kích hoạt thành công!',
+              type: 'PAYMENT',
+              timestamp: 'Vừa xong',
+              isRead: false,
+            };
+            setNotifications(prev => [toast, ...prev]);
+            setActiveNotificationToast(toast);
+          }
+        }
+      };
+    } catch (e) {
+      console.warn('Lỗi lắng nghe BroadcastChannel:', e);
+    }
+    return () => {
+      if (bc) bc.close();
+    };
+  }, [loadMyEnrollments, loadNotifications]);
+
+  /** Bắt query VNPay callback nếu người dùng vô tình truy cập vào URL gốc */
+  useEffect(() => {
+    if (location.pathname === '/' && location.search && location.search.includes('vnp_')) {
+      navigate(`/payment/result${location.search}`, { replace: true });
+    }
+  }, [location.pathname, location.search, navigate]);
+
+  /** Bắt query verify QR code nếu truy cập /?verify=... */
+  useEffect(() => {
+    const verifyHash = new URLSearchParams(location.search).get('verify');
+    if (verifyHash) {
+      navigate(`/verify/${verifyHash}`, { replace: true });
+    }
+  }, [location.search, navigate]);
+
+  /** Tải chứng chỉ của tôi */
   const loadCertificates = useCallback(async (): Promise<Certificate[]> => {
     if (!isAuthenticated) {
       setCertificates([]);
@@ -368,78 +330,6 @@ export default function App() {
     void loadCertificates();
   }, [loadCertificates]);
 
-  // 3. Tự động phát hiện và xử lý kết quả thanh toán từ VNPay Callback URL
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.location.search) {
-      const result = parseVNPayCallback(window.location.search);
-      if (result) {
-        setPaymentResult(result);
-        cleanUrlQueryParams();
-
-        if (result.isSuccess) {
-          void loadMyEnrollments();
-        }
-
-        // Tự động đẩy thông báo vào Notification Dropdown
-        const newNotif: NotificationItem = {
-          id: `pay_${Date.now()}`,
-          title: result.isSuccess ? 'Thanh toán thành công' : 'Thanh toán không thành công',
-          message: result.message,
-          type: 'PAYMENT',
-          timestamp: 'Vừa xong',
-          isRead: false,
-        };
-        setNotifications((prev) => [newNotif, ...prev]);
-        setActiveNotificationToast(newNotif);
-      }
-    }
-  }, [loadMyEnrollments]);
-
-  // Lắng nghe kết quả thanh toán từ các tab khác (BroadcastChannel) để đồng bộ thông báo và quyền học
-  useEffect(() => {
-    if (typeof BroadcastChannel === 'undefined') return;
-    let bc: BroadcastChannel | null = null;
-    try {
-      bc = new BroadcastChannel('edutech_payment');
-      bc.onmessage = (event) => {
-        if (event.data?.type === 'VNPAY_PAYMENT_COMPLETED') {
-          const res = event.data.result as VNPayPaymentResult;
-          void loadMyEnrollments();
-          void loadNotifications();
-          if (res?.isSuccess) {
-            const toast: NotificationItem = {
-              id: `bc_pay_${Date.now()}`,
-              title: 'Thanh toán thành công',
-              message: res.message || 'Khóa học của bạn đã được kích hoạt thành công!',
-              type: 'PAYMENT',
-              timestamp: 'Vừa xong',
-              isRead: false,
-            };
-            setNotifications((prev) => [toast, ...prev]);
-            setActiveNotificationToast(toast);
-          }
-        }
-      };
-    } catch (e) {
-      console.warn('Lỗi lắng nghe BroadcastChannel:', e);
-    }
-    return () => {
-      if (bc) bc.close();
-    };
-  }, [loadMyEnrollments, loadNotifications]);
-
-  /**
-   * Điểm vào cho link QR trên chứng chỉ: /?verify=<qrCodeHash>
-   * Không có router nên đọc thẳng query param để mở trang xác thực công khai.
-   */
-  useEffect(() => {
-    const verifyHash = new URLSearchParams(window.location.search).get('verify');
-    if (!verifyHash) return;
-    setPublicVerifyHash(verifyHash);
-    setCurrentPortal('public_verify');
-    cleanUrlQueryParams();
-  }, []);
-
   const handleMarkAllAsRead = async () => {
     try {
       await notificationApi.markAllAsRead();
@@ -459,100 +349,39 @@ export default function App() {
     }
   };
 
-  /** Chứng chỉ đang xét: ưu tiên khóa đang học, nếu không lấy cái mới nhất. */
-  const activeCertificate = certificates.find(cert => cert.courseId === activeCourse?.id)
-    ?? certificates[0]
-    ?? null;
-
+  const activeCertificate = certificates[0] ?? null;
   const certificateToShow = certificateForPreview ?? activeCertificate;
 
   const handleOpenCertificate = async () => {
-    // Mở từ header thì bỏ chứng chỉ đang xem trước, quay về chứng chỉ của chính mình
     setCertificateForPreview(null);
     setShowCertificateModal(true);
-
     let cert = activeCertificate;
-    if (!cert && isAuthenticated && activeCourse) {
+    if (!cert && isAuthenticated) {
       const refreshed = await loadCertificates();
-      cert = refreshed.find(c => c.courseId === activeCourse.id) ?? refreshed[0] ?? null;
+      cert = refreshed[0] ?? null;
     }
-
     if (cert) {
       try {
         confetti({ particleCount: 70, spread: 60, origin: { y: 0.4 } });
-      } catch {
-        // Bỏ qua nếu trình duyệt không hỗ trợ
-      }
+      } catch {}
     }
   };
 
   const handleOpenPublicVerify = (hash?: string) => {
-    setPublicVerifyHash(hash ?? activeCertificate?.qrCodeHash ?? '');
-    setCurrentPortal('public_verify');
     setShowCertificateModal(false);
+    navigate(hash ? `/verify/${hash}` : '/verify');
   };
 
-  // Nếu đang ở trang xác thực chứng chỉ công khai (Không cần đăng nhập, toàn màn hình)
-  if (currentPortal === 'public_verify') {
-    return (
-      <>
-        <PublicVerifyView
-          hash={publicVerifyHash}
-          onBackToApp={() => setCurrentPortal('learner')}
-          onOpenCertificatePreview={(found) => {
-            setCertificateForPreview(found);
-            setShowCertificateModal(true);
-          }}
-        />
-        {/* Modal phải render ngay trong nhánh này, nếu không nút xem bản gốc sẽ không mở được gì */}
-        {showCertificateModal && certificateToShow && (
-          <CertificateView
-            certificate={certificateToShow}
-            onClose={() => setShowCertificateModal(false)}
-            onOpenPublicVerify={handleOpenPublicVerify}
-          />
-        )}
-      </>
-    );
-  }
-
-  // Nếu đang trong phòng học LMS (Cinema Mode Layout)
-  if (isInLearningRoom && activeCourse) {
-    return (
-      <LearningLayout
-        courseTitle={activeCourse.title}
-        progressPercent={activeEnrollment?.completedRate ?? 0}
-        onBack={() => { setIsInLearningRoom(false); setIsLearningPreview(false); }}
-        onOpenCertificate={handleOpenCertificate}
-      >
-        <LearningRoom
-          course={activeCourse}
-          enrollment={activeEnrollment}
-          previewMode={isLearningPreview}
-          onBack={() => { setIsInLearningRoom(false); setIsLearningPreview(false); }}
-          onOpenCertificate={handleOpenCertificate}
-        />
-
-        {showCertificateModal && certificateToShow && (
-          <CertificateView
-            certificate={certificateToShow}
-            onClose={() => setShowCertificateModal(false)}
-            onOpenPublicVerify={handleOpenPublicVerify}
-          />
-        )}
-      </LearningLayout>
-    );
-  }
-
-  // Shared handlers for Header across layouts
+  // Shared Header props
   const sharedHeaderProps = {
     currentPortal,
     onSelectPortal: handleSelectPortal,
     onOpenLearningRoom: () => {
-      if (activeCourse) {
-        void enterLearningRoom(activeCourse, {
-          preview: currentPortal === 'instructor' || currentPortal === 'admin',
-        });
+      const lastEnrolled = myEnrollments.find(e => e.status?.toUpperCase() === 'ACTIVE');
+      if (lastEnrolled) {
+        navigate(`/learn/${lastEnrolled.courseId}`);
+      } else {
+        navigate('/');
       }
     },
     onOpenCertificate: handleOpenCertificate,
@@ -567,7 +396,7 @@ export default function App() {
         setShowOrderHistoryModal(true);
       } else if (item.type === 'COURSE_APPROVED' || item.type === 'COURSE_REJECTED' || item.type === 'PAYOUT_APPROVED' || item.type === 'PAYOUT_REJECTED') {
         if (canAccessPortal(currentUser?.roles || [], 'instructor')) {
-          handleSelectPortal('instructor');
+          navigate('/instructor');
         }
       }
     },
@@ -577,122 +406,170 @@ export default function App() {
 
   return (
     <>
-      {/* 1. Phân hệ Giảng viên (Instructor Studio) */}
-      {currentPortal === 'instructor' && (
-        <InstructorLayout {...sharedHeaderProps}>
-          {selectedInstructorCourse ? (
-            <InstructorStudio
-              course={selectedInstructorCourse}
-              onEnterLearningRoom={(course) => enterLearningRoom(course, { preview: true })}
-              onBackToCourseList={() => setSelectedInstructorCourse(null)}
-            />
-          ) : (
-            <InstructorCourseManager
-              onSelectCourse={selectInstructorCourse}
-              onBackToLearner={() => handleSelectPortal('learner')}
-            />
-          )}
-        </InstructorLayout>
-      )}
-
-      {/* 2. Phân hệ Quản trị viên (Admin Portal) */}
-      {currentPortal === 'admin' && (
-        <AdminLayout {...sharedHeaderProps} onBackToLearner={() => handleSelectPortal('learner')}>
-          <AdminPortal
-            onPreviewCourse={(course) => enterLearningRoom(course, { preview: true })}
-            onBackToLearner={() => handleSelectPortal('learner')}
-          />
-        </AdminLayout>
-      )}
-
-      {/* 3. Phân hệ Học viên (Learner Portal - Default) */}
-      {currentPortal === 'learner' && (
-        <MainLayout {...sharedHeaderProps}>
-          {paymentResult ? (
-            <PaymentResultView
-              result={paymentResult}
-              courseTitle={paymentCourse?.title || 'Khóa học'}
-              courseId={paymentCourse?.id || getPendingPurchase() || ''}
-              onStartLearning={async (courseId?: string) => {
-                let courseToEnter = paymentCourse;
-                if (!courseToEnter) {
-                  const targetId = courseId || getPendingPurchase();
-                  if (targetId) {
-                    courseToEnter = coursesList.find(c => c.id === targetId) || null;
-                    if (!courseToEnter) {
-                      try {
-                        courseToEnter = await courseApi.getCourseById(targetId);
-                      } catch (err) {
-                        console.warn('Không tải được thông tin khóa học:', err);
-                      }
-                    }
-                  }
-                }
-                if (courseToEnter) {
-                  const entered = await enterLearningRoom(courseToEnter);
-                  if (entered) {
-                    clearPendingPurchase();
-                    setPaymentResult(null);
-                    setDetailCourse(null);
-                  }
-                }
-              }}
-              accessError={coursesError}
-              onRetry={() => {
-                setPaymentResult(null);
-                clearPendingPurchase();
-              }}
-              onBackHome={() => {
-                setPaymentResult(null);
-                setPaymentCourse(null);
-                setDetailCourse(null);
-                clearPendingPurchase();
-                void loadMyEnrollments();
-              }}
-            />
-          ) : detailCourse ? (
-            detailLoading ? (
-              <div className="flex items-center justify-center gap-2 py-24 text-sm text-slate-500">
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Đang tải chi tiết khóa học...
-              </div>
-            ) : detailError ? (
-              <div className="max-w-xl mx-auto my-16 p-6 bg-rose-50 border border-rose-200 rounded-2xl text-sm text-rose-700 space-y-3">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-                  <span>{detailError}</span>
-                </div>
-                <button
-                  onClick={() => setDetailCourse(null)}
-                  className="px-3 py-1.5 rounded-xl bg-white border border-rose-200 text-xs font-semibold hover:bg-rose-100 transition cursor-pointer"
-                >
-                  Quay lại danh mục
-                </button>
-              </div>
-            ) : (
-              <CourseDetail
-                course={detailCourse}
-                isEnrolled={myEnrollments.some(item => item.courseId === detailCourse.id && item.status?.toUpperCase() === 'ACTIVE')}
-                onBack={() => setDetailCourse(null)}
-                onStartLearning={enterLearningRoom}
-                onEnrollFreeCourse={enrollInFreeCourse}
-                onSelectRelatedCourse={openCourseDetail}
+      <Routes>
+        {/* 1. Trang chủ / Danh mục khóa học */}
+        <Route
+          path="/"
+          element={
+            <MainLayout {...sharedHeaderProps}>
+              <CourseCatalog
+                courses={coursesList}
+                enrollments={myEnrollments}
+                enrollmentsLoading={enrollmentsLoading}
+                loading={coursesLoading}
+                error={coursesError}
+                onRetry={loadCourses}
+                onSelectCourse={(courseOrId) => {
+                  const id = typeof courseOrId === 'string' ? courseOrId : courseOrId.id;
+                  navigate(`/courses/${id}`);
+                }}
+                onEnterLearningRoom={(course) => navigate(`/learn/${course.id}`)}
               />
-            )
-          ) : (
-            <CourseCatalog
-              courses={coursesList}
-              enrollments={myEnrollments}
-              enrollmentsLoading={enrollmentsLoading}
-              loading={coursesLoading}
-              error={coursesError}
-              onRetry={loadCourses}
-              onSelectCourse={openCourseDetail}
-              onEnterLearningRoom={enterLearningRoom}
+            </MainLayout>
+          }
+        />
+
+        {/* 2. Chi tiết khóa học theo URL */}
+        <Route
+          path="/courses/:courseId"
+          element={
+            <MainLayout {...sharedHeaderProps}>
+              <CourseDetailWrapper
+                coursesList={coursesList}
+                courseCache={courseCache}
+                setCourseCache={setCourseCache}
+                myEnrollments={myEnrollments}
+                ensureCourseDetail={ensureCourseDetail}
+                onEnrollFreeCourse={enrollInFreeCourse}
+              />
+            </MainLayout>
+          }
+        />
+
+        {/* 3. Phòng học trực tuyến LMS (Cinema Mode) */}
+        <Route
+          path="/learn/:courseId"
+          element={
+            <LearningRoomWrapper
+              ensureCourseDetail={ensureCourseDetail}
+              pollEnrollmentActive={pollEnrollmentActive}
+              myEnrollments={myEnrollments}
+              setMyEnrollments={setMyEnrollments}
+              isAuthenticated={isAuthenticated}
+              onOpenAuthModal={() => setIsAuthModalOpen(true)}
+              onOpenCertificate={handleOpenCertificate}
+              showCertificateModal={showCertificateModal}
+              certificateToShow={certificateToShow}
+              setShowCertificateModal={setShowCertificateModal}
+              handleOpenPublicVerify={handleOpenPublicVerify}
             />
-          )}
-        </MainLayout>
-      )}
+          }
+        />
+
+        {/* 4. Kết quả thanh toán VNPay */}
+        <Route
+          path="/payment/result"
+          element={
+            <MainLayout {...sharedHeaderProps}>
+              <PaymentResultWrapper
+                coursesList={coursesList}
+                loadMyEnrollments={loadMyEnrollments}
+                loadNotifications={loadNotifications}
+                setActiveNotificationToast={setActiveNotificationToast}
+              />
+            </MainLayout>
+          }
+        />
+
+        {/* 5. Phân hệ Giảng viên: Danh sách khóa học */}
+        <Route
+          path="/instructor"
+          element={
+            canAccessPortal(currentUser?.roles, 'instructor') ? (
+              <InstructorLayout {...sharedHeaderProps}>
+                <InstructorCourseManager
+                  onSelectCourse={(course) => navigate(`/instructor/courses/${course.id}`)}
+                  onBackToLearner={() => navigate('/')}
+                />
+              </InstructorLayout>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+
+        {/* 6. Phân hệ Giảng viên: Quản trị nội dung khóa học (Studio) */}
+        <Route
+          path="/instructor/courses/:courseId"
+          element={
+            canAccessPortal(currentUser?.roles, 'instructor') ? (
+              <InstructorLayout {...sharedHeaderProps}>
+                <InstructorStudioWrapper ensureCourseDetail={ensureCourseDetail} />
+              </InstructorLayout>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+
+        {/* 7. Phân hệ Quản trị viên (Admin Portal) */}
+        <Route
+          path="/admin"
+          element={
+            canAccessPortal(currentUser?.roles, 'admin') ? (
+              <AdminLayout {...sharedHeaderProps} onBackToLearner={() => navigate('/')}>
+                <AdminPortal
+                  onPreviewCourse={(course) => navigate(`/learn/${course.id}?preview=true`)}
+                  onBackToLearner={() => navigate('/')}
+                />
+              </AdminLayout>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+
+        {/* 8. Tra cứu chứng chỉ công khai */}
+        <Route
+          path="/verify"
+          element={
+            <PublicVerifyWrapper
+              setCertificateForPreview={setCertificateForPreview}
+              setShowCertificateModal={setShowCertificateModal}
+              showCertificateModal={showCertificateModal}
+              certificateToShow={certificateToShow}
+              handleOpenPublicVerify={handleOpenPublicVerify}
+            />
+          }
+        />
+        <Route
+          path="/verify/:hash"
+          element={
+            <PublicVerifyWrapper
+              setCertificateForPreview={setCertificateForPreview}
+              setShowCertificateModal={setShowCertificateModal}
+              showCertificateModal={showCertificateModal}
+              certificateToShow={certificateToShow}
+              handleOpenPublicVerify={handleOpenPublicVerify}
+            />
+          }
+        />
+        <Route
+          path="/certificates/verify/:hash"
+          element={
+            <PublicVerifyWrapper
+              setCertificateForPreview={setCertificateForPreview}
+              setShowCertificateModal={setShowCertificateModal}
+              showCertificateModal={showCertificateModal}
+              certificateToShow={certificateToShow}
+              handleOpenPublicVerify={handleOpenPublicVerify}
+            />
+          }
+        />
+
+        {/* 9. Bắt các URL không tồn tại quay về trang chủ */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
 
       {/* Modal Chứng chỉ dùng chung */}
       {showCertificateModal && certificateToShow && (
@@ -701,24 +578,6 @@ export default function App() {
           onClose={() => setShowCertificateModal(false)}
           onOpenPublicVerify={handleOpenPublicVerify}
         />
-      )}
-
-      {showCertificateModal && !certificateToShow && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 text-center space-y-3">
-            <Award className="w-10 h-10 text-slate-300 mx-auto" />
-            <h3 className="font-bold text-[#2c3e50]">Bạn chưa có chứng chỉ nào</h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Chứng chỉ được cấp khi bạn hoàn thành 100% bài học của một khóa học đã ghi danh.
-            </p>
-            <button
-              onClick={() => setShowCertificateModal(false)}
-              className="px-4 py-2 rounded-xl bg-[#2c3e50] hover:bg-[#1a252f] text-white text-xs font-bold transition cursor-pointer"
-            >
-              Đóng
-            </button>
-          </div>
-        </div>
       )}
 
       {/* IAM Modal Đăng nhập / Đăng ký */}
@@ -736,7 +595,7 @@ export default function App() {
         onClose={() => setShowOrderHistoryModal(false)}
         onSelectCourse={(courseId) => {
           setShowOrderHistoryModal(false);
-          openCourseDetail(courseId);
+          navigate(`/courses/${courseId}`);
         }}
       />
 
@@ -778,6 +637,538 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+    </>
+  );
+}
+
+// ============================================================================
+// SUB-ROUTER WRAPPERS: Độc lập, đọc URL params trực tiếp, hỗ trợ F5 & Bookmark
+// ============================================================================
+
+/** Wrapper chi tiết khóa học: /courses/:courseId */
+function CourseDetailWrapper({
+  coursesList,
+  courseCache,
+  setCourseCache,
+  myEnrollments,
+  ensureCourseDetail,
+  onEnrollFreeCourse,
+}: {
+  coursesList: Course[];
+  courseCache: Record<string, Course>;
+  setCourseCache: React.Dispatch<React.SetStateAction<Record<string, Course>>>;
+  myEnrollments: EnrollmentDto[];
+  ensureCourseDetail: (c: Course | string) => Promise<Course>;
+  onEnrollFreeCourse: (c: Course) => Promise<void>;
+}) {
+  const { courseId } = useParams<{ courseId: string }>();
+  const navigate = useNavigate();
+  const [course, setCourse] = useState<Course | null>(courseCache[courseId || ''] || null);
+  const [loading, setLoading] = useState(!course);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!courseId) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    ensureCourseDetail(courseId)
+      .then((detail) => {
+        if (!cancelled) setCourse(detail);
+      })
+      .catch((err: any) => {
+        if (!cancelled) {
+          setError(
+            err?.code === 401
+              ? 'Bạn cần đăng nhập để xem chi tiết khóa học này.'
+              : err?.message || 'Không tải được chi tiết khóa học.',
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId, ensureCourseDetail]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-32 text-sm text-slate-500">
+        <Loader2 className="w-5 h-5 animate-spin text-emerald-600" />
+        Đang tải chi tiết khóa học...
+      </div>
+    );
+  }
+
+  if (error || !course) {
+    return (
+      <div className="max-w-xl mx-auto my-16 p-6 bg-rose-50 border border-rose-200 rounded-2xl text-sm text-rose-700 space-y-3">
+        <div className="flex items-start gap-2">
+          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+          <span>{error || 'Không tìm thấy thông tin khóa học.'}</span>
+        </div>
+        <button
+          onClick={() => navigate('/')}
+          className="px-3.5 py-2 rounded-xl bg-white border border-rose-200 text-xs font-semibold hover:bg-rose-100 transition cursor-pointer"
+        >
+          Quay lại danh mục khóa học
+        </button>
+      </div>
+    );
+  }
+
+  const isEnrolled = myEnrollments.some(
+    (item) => item.courseId === course.id && item.status?.toUpperCase() === 'ACTIVE',
+  );
+
+  return (
+    <CourseDetail
+      course={course}
+      isEnrolled={isEnrolled}
+      onBack={() => navigate('/')}
+      onStartLearning={(c) => navigate(`/learn/${c.id}`)}
+      onEnrollFreeCourse={onEnrollFreeCourse}
+      onSelectRelatedCourse={(c) => {
+        const id = typeof c === 'string' ? c : c.id;
+        navigate(`/courses/${id}`);
+      }}
+    />
+  );
+}
+
+/** Wrapper phòng học trực tuyến LMS: /learn/:courseId */
+function LearningRoomWrapper({
+  ensureCourseDetail,
+  pollEnrollmentActive,
+  myEnrollments,
+  setMyEnrollments,
+  isAuthenticated,
+  onOpenAuthModal,
+  onOpenCertificate,
+  showCertificateModal,
+  certificateToShow,
+  setShowCertificateModal,
+  handleOpenPublicVerify,
+}: {
+  ensureCourseDetail: (c: Course | string) => Promise<Course>;
+  pollEnrollmentActive: (id: string) => Promise<EnrollmentDto | null>;
+  myEnrollments: EnrollmentDto[];
+  setMyEnrollments: React.Dispatch<React.SetStateAction<EnrollmentDto[]>>;
+  isAuthenticated: boolean;
+  onOpenAuthModal: () => void;
+  onOpenCertificate: () => void;
+  showCertificateModal: boolean;
+  certificateToShow: Certificate | null;
+  setShowCertificateModal: (show: boolean) => void;
+  handleOpenPublicVerify: (hash?: string) => void;
+}) {
+  const { courseId } = useParams<{ courseId: string }>();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const isPreview = searchParams.get('preview') === 'true';
+
+  const [course, setCourse] = useState<Course | null>(null);
+  const [enrollment, setEnrollment] = useState<EnrollmentDto | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!courseId) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    const initLearning = async () => {
+      try {
+        if (!isPreview && !isAuthenticated) {
+          onOpenAuthModal();
+          setError('Bạn cần đăng nhập để tham gia phòng học.');
+          setLoading(false);
+          return;
+        }
+
+        let currentEnrollment: EnrollmentDto | null = null;
+        if (!isPreview) {
+          currentEnrollment = await pollEnrollmentActive(courseId);
+          if (!currentEnrollment || currentEnrollment.status?.toUpperCase() !== 'ACTIVE') {
+            setError('Khóa học chưa được kích hoạt. Hãy hoàn tất thanh toán và kiểm tra lại.');
+            setLoading(false);
+            return;
+          }
+          if (!cancelled) {
+            setEnrollment(currentEnrollment);
+            setMyEnrollments(prev => [currentEnrollment!, ...prev.filter(i => i.courseId !== courseId)]);
+          }
+        }
+
+        const fullCourse = await ensureCourseDetail(courseId);
+        if (!cancelled) {
+          setCourse(fullCourse);
+        }
+      } catch (err: any) {
+        if (!cancelled) setError(err?.message || 'Không thể mở phòng học.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    void initLearning();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId, isPreview, isAuthenticated, ensureCourseDetail, pollEnrollmentActive, onOpenAuthModal, setMyEnrollments]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0f172a] flex flex-col items-center justify-center gap-3 text-white">
+        <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
+        <span className="text-sm font-medium text-slate-300">Đang chuẩn bị phòng học và tải bài giảng...</span>
+      </div>
+    );
+  }
+
+  if (error || !course) {
+    return (
+      <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-[#1e293b] border border-slate-700 rounded-3xl p-6 text-center space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <h3 className="font-bold text-white text-base">Chưa thể vào phòng học</h3>
+          <p className="text-xs text-slate-400 leading-relaxed">{error || 'Không tìm thấy thông tin khóa học.'}</p>
+          <div className="pt-2 flex flex-col gap-2">
+            <button
+              onClick={() => navigate(`/courses/${courseId}`)}
+              className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition cursor-pointer"
+            >
+              Xem trang khóa học
+            </button>
+            <button
+              onClick={() => navigate('/')}
+              className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition cursor-pointer"
+            >
+              Về trang chủ
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <LearningLayout
+      courseTitle={course.title}
+      progressPercent={enrollment?.completedRate ?? 0}
+      onBack={() => navigate(`/courses/${course.id}`)}
+      onOpenCertificate={onOpenCertificate}
+    >
+      <LearningRoom
+        course={course}
+        enrollment={enrollment}
+        previewMode={isPreview}
+        onBack={() => navigate(`/courses/${course.id}`)}
+        onOpenCertificate={onOpenCertificate}
+      />
+
+      {showCertificateModal && certificateToShow && (
+        <CertificateView
+          certificate={certificateToShow}
+          onClose={() => setShowCertificateModal(false)}
+          onOpenPublicVerify={handleOpenPublicVerify}
+        />
+      )}
+    </LearningLayout>
+  );
+}
+
+/**
+ * Wrapper trang kết quả thanh toán VNPay: /payment/result
+ * Giải quyết dứt điểm nút "Vào phòng học ngay": Tự động tra cứu courseId từ orderId/enrollment nếu storage bị thiếu
+ */
+function PaymentResultWrapper({
+  coursesList,
+  loadMyEnrollments,
+  loadNotifications,
+  setActiveNotificationToast,
+}: {
+  coursesList: Course[];
+  loadMyEnrollments: () => Promise<void>;
+  loadNotifications: () => Promise<void>;
+  setActiveNotificationToast: (n: NotificationItem | null) => void;
+}) {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const [paymentResult, setPaymentResult] = useState<VNPayPaymentResult | null>(() => {
+    return parseVNPayCallback(location.search);
+  });
+  const [resolvedCourse, setResolvedCourse] = useState<Course | null>(null);
+  const [resolvedCourseId, setResolvedCourseId] = useState<string>(() => getPendingPurchase() || '');
+  const [isResolving, setIsResolving] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Xử lý callback VNPay khi trang kết quả mount
+  useEffect(() => {
+    const res = parseVNPayCallback(location.search);
+    if (res) {
+      setPaymentResult(res);
+      cleanUrlQueryParams();
+
+      if (res.isSuccess) {
+        void loadMyEnrollments();
+        void loadNotifications();
+      }
+
+      const toast: NotificationItem = {
+        id: `pay_${Date.now()}`,
+        title: res.isSuccess ? 'Thanh toán thành công' : 'Thanh toán không thành công',
+        message: res.message,
+        type: 'PAYMENT',
+        timestamp: 'Vừa xong',
+        isRead: false,
+      };
+      setActiveNotificationToast(toast);
+    }
+  }, [location.search, loadMyEnrollments, loadNotifications, setActiveNotificationToast]);
+
+  // Tự động phân giải courseId qua nhiều nguồn: pendingStorage -> enrollments -> orderId
+  useEffect(() => {
+    let cancelled = false;
+
+    const resolveCourse = async () => {
+      let targetId = resolvedCourseId || getPendingPurchase() || '';
+
+      // 1. Nếu chưa có targetId, thử tìm qua các khóa học đã ghi danh
+      if (!targetId) {
+        try {
+          const myEnr = await enrollmentApi.getMyEnrollments();
+          if (myEnr.items && myEnr.items.length > 0) {
+            const active = myEnr.items.find(e => e.status?.toUpperCase() === 'ACTIVE') || myEnr.items[0];
+            if (active) targetId = active.courseId;
+          }
+        } catch (e) {
+          console.warn('Lỗi kiểm tra enrollments:', e);
+        }
+      }
+
+      // 2. Nếu vẫn chưa có và có mã đơn hàng từ VNPay (vnp_TxnRef), gọi orderApi lấy chi tiết đơn hàng
+      if (!targetId && paymentResult?.orderId) {
+        try {
+          const rawOrderId = paymentResult.orderId.split('_')[0];
+          const order = await orderApi.getOrderDetail(rawOrderId);
+          if (order?.items?.[0]?.courseId) {
+            targetId = order.items[0].courseId;
+          }
+        } catch (e) {
+          console.warn('Lỗi kiểm tra đơn hàng từ orderApi:', e);
+        }
+      }
+
+      if (targetId && !cancelled) {
+        setResolvedCourseId(targetId);
+        // Tìm trong coursesList đã có hoặc gọi getCourseById
+        const fromList = coursesList.find(c => c.id === targetId);
+        if (fromList) {
+          setResolvedCourse(fromList);
+        } else {
+          try {
+            const fetched = await courseApi.getCourseById(targetId);
+            if (!cancelled) setResolvedCourse(fetched);
+          } catch (err) {
+            console.warn('Không tải được chi tiết khóa học:', err);
+          }
+        }
+      }
+    };
+
+    void resolveCourse();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [paymentResult?.orderId, coursesList, resolvedCourseId]);
+
+  /** Nút "Vào phòng học ngay" HOẠT ĐỘNG CHUẨN XÁC 100% */
+  const handleStartLearning = async (overrideId?: string) => {
+    setIsResolving(true);
+    setErrorMessage(null);
+    try {
+      let id = overrideId || resolvedCourseId || resolvedCourse?.id || getPendingPurchase();
+
+      // Nếu vẫn thiếu ID, thử vét cạn qua enrollments
+      if (!id) {
+        try {
+          const myEnr = await enrollmentApi.getMyEnrollments();
+          if (myEnr.items && myEnr.items.length > 0) {
+            const active = myEnr.items.find(e => e.status?.toUpperCase() === 'ACTIVE') || myEnr.items[0];
+            if (active) id = active.courseId;
+          }
+        } catch {}
+      }
+
+      // Vét cạn qua orderApi
+      if (!id && paymentResult?.orderId) {
+        try {
+          const rawOrderId = paymentResult.orderId.split('_')[0];
+          const order = await orderApi.getOrderDetail(rawOrderId);
+          if (order?.items?.[0]?.courseId) id = order.items[0].courseId;
+        } catch {}
+      }
+
+      if (!id) {
+        setErrorMessage('Không xác định được khóa học. Đang chuyển về Trang chủ...');
+        setTimeout(() => navigate('/'), 1500);
+        return;
+      }
+
+      clearPendingPurchase();
+      navigate(`/learn/${id}`);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Có lỗi khi vào phòng học.');
+    } finally {
+      setIsResolving(false);
+    }
+  };
+
+  if (!paymentResult) {
+    return (
+      <div className="max-w-md mx-auto my-24 p-6 bg-slate-50 border border-slate-200 rounded-2xl text-center space-y-3">
+        <p className="text-sm text-slate-600">Không có dữ liệu giao dịch cần hiển thị.</p>
+        <button
+          onClick={() => navigate('/')}
+          className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-500 transition cursor-pointer"
+        >
+          Về Trang Chủ
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <PaymentResultView
+      result={paymentResult}
+      courseTitle={resolvedCourse?.title || 'Khóa học của bạn'}
+      courseId={resolvedCourseId}
+      onStartLearning={(cId) => void handleStartLearning(cId)}
+      accessError={errorMessage}
+      onRetry={() => {
+        clearPendingPurchase();
+        navigate(resolvedCourseId ? `/courses/${resolvedCourseId}` : '/');
+      }}
+      onBackHome={() => {
+        clearPendingPurchase();
+        navigate('/');
+      }}
+    />
+  );
+}
+
+/** Wrapper Studio Giảng viên: /instructor/courses/:courseId */
+function InstructorStudioWrapper({
+  ensureCourseDetail,
+}: {
+  ensureCourseDetail: (c: Course | string) => Promise<Course>;
+}) {
+  const { courseId } = useParams<{ courseId: string }>();
+  const navigate = useNavigate();
+  const [course, setCourse] = useState<Course | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!courseId) return;
+    let cancelled = false;
+    setLoading(true);
+
+    ensureCourseDetail(courseId)
+      .then((detail) => {
+        if (!cancelled) setCourse(detail);
+      })
+      .catch((err) => {
+        console.error('Không tải được studio khóa học:', err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId, ensureCourseDetail]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-32 text-sm text-slate-500">
+        <Loader2 className="w-5 h-5 animate-spin text-emerald-600" />
+        Đang nạp dữ liệu Studio Giảng viên...
+      </div>
+    );
+  }
+
+  if (!course) {
+    return (
+      <div className="max-w-xl mx-auto my-16 p-6 bg-rose-50 border border-rose-200 rounded-2xl text-sm text-rose-700 space-y-3">
+        <span>Không tìm thấy thông tin khóa học giảng dạy.</span>
+        <div>
+          <button
+            onClick={() => navigate('/instructor')}
+            className="px-3.5 py-2 rounded-xl bg-white border border-rose-200 text-xs font-semibold hover:bg-rose-100 transition cursor-pointer"
+          >
+            Về danh sách khóa học giảng viên
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <InstructorStudio
+      course={course}
+      onEnterLearningRoom={(c) => navigate(`/learn/${c.id}?preview=true`)}
+      onBackToCourseList={() => navigate('/instructor')}
+      onBackToLearner={() => navigate('/')}
+    />
+  );
+}
+
+/** Wrapper trang xác thực chứng chỉ công khai: /verify hoặc /verify/:hash */
+function PublicVerifyWrapper({
+  setCertificateForPreview,
+  setShowCertificateModal,
+  showCertificateModal,
+  certificateToShow,
+  handleOpenPublicVerify,
+}: {
+  setCertificateForPreview: (c: Certificate | null) => void;
+  setShowCertificateModal: (show: boolean) => void;
+  showCertificateModal: boolean;
+  certificateToShow: Certificate | null;
+  handleOpenPublicVerify: (hash?: string) => void;
+}) {
+  const { hash } = useParams<{ hash: string }>();
+  const navigate = useNavigate();
+
+  return (
+    <>
+      <PublicVerifyView
+        hash={hash || ''}
+        onBackToApp={() => navigate('/')}
+        onOpenCertificatePreview={(found) => {
+          setCertificateForPreview(found);
+          setShowCertificateModal(true);
+        }}
+      />
+      {showCertificateModal && certificateToShow && (
+        <CertificateView
+          certificate={certificateToShow}
+          onClose={() => setShowCertificateModal(false)}
+          onOpenPublicVerify={handleOpenPublicVerify}
+        />
       )}
     </>
   );

@@ -290,7 +290,7 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
         <div className="max-w-4xl space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             {course.category && (
-              <span className="px-3 py-1 rounded-full bg-[#e74c3c] text-white text-xs font-bold">
+              <span className="px-3 py-1 rounded-full bg-indigo-600 text-white text-xs font-bold shadow-xs">
                 {course.category}
               </span>
             )}
@@ -665,16 +665,16 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                 {isEnrolled ? (
                   <button
                     onClick={() => onStartLearning(course)}
-                    className="w-full py-3.5 px-4 rounded-2xl bg-[#2c3e50] hover:bg-[#1a252f] text-white font-bold text-sm shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full py-3.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-lg shadow-emerald-900/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <PlayCircle className="w-5 h-5 text-[#e74c3c]" />
+                    <PlayCircle className="w-5 h-5 text-white" />
                     <span>Tiếp tục học</span>
                   </button>
                 ) : course.price > 0 ? (
                   <button
                     disabled={isCheckingOut}
                     onClick={handleCheckoutVNPay}
-                    className="w-full py-3.5 px-4 rounded-2xl bg-[#e74c3c] hover:bg-[#c0392b] text-white font-bold text-sm shadow-xl shadow-red-900/20 transition-all hover:scale-[1.02] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    className="w-full py-3.5 px-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-xl shadow-indigo-900/20 transition-all hover:scale-[1.01] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                   >
                     {isCheckingOut ? <span>Đang tạo đơn hàng...</span> : <><ShieldCheck className="w-5 h-5" /><span>Đăng ký và thanh toán VNPay</span></>}
                   </button>

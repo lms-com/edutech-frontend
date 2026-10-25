@@ -638,13 +638,31 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
 
                   {/* Comment Input Box */}
                   <form onSubmit={e => void handlePostComment(e)} className="space-y-2.5">
+                    <div className="flex items-center justify-between pb-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const video = document.querySelector('video');
+                          const t = video ? Math.floor(video.currentTime) : 0;
+                          const m = Math.floor(t / 60).toString().padStart(2, '0');
+                          const s = (t % 60).toString().padStart(2, '0');
+                          const tag = `[${m}:${s}] `;
+                          setNewCommentText(prev => (prev.includes(tag) ? prev : tag + prev));
+                        }}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-indigo-300 hover:text-white bg-indigo-950/60 hover:bg-indigo-900 rounded-lg border border-indigo-700/50 transition cursor-pointer"
+                        title="Tự động lấy vị trí thời gian của video đang phát chèn vào câu hỏi"
+                      >
+                        <Clock className="w-3.5 h-3.5 text-indigo-400" />
+                        Đính kèm thời gian hiện tại
+                      </button>
+                    </div>
                     <div className="relative">
                       <textarea
                         rows={3}
                         value={newCommentText}
                         onChange={e => setNewCommentText(e.target.value)}
                         placeholder="Đặt câu hỏi hoặc chia sẻ thắc mắc về bài học này..."
-                        className="w-full p-3.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-[#e74c3c] leading-relaxed resize-none"
+                        className="w-full p-3.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 leading-relaxed resize-none"
                       />
                     </div>
                     <div className="flex items-center justify-between">
@@ -654,7 +672,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                       <button
                         type="submit"
                         disabled={submittingComment || !newCommentText.trim()}
-                        className="px-4 py-2 bg-[#e74c3c] hover:bg-[#c0392b] text-white text-xs font-bold rounded-xl shadow-md transition disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
                       >
                         {submittingComment ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                         Gửi câu hỏi
@@ -835,13 +853,13 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
           </div>
         </div>
 
-        {/* Right: Curriculum Accordion Sidebar (4 cols) */}
-        <div className="lg:col-span-4 flex flex-col gap-4">
-          <div className="bg-[#0f172a] rounded-2xl border border-slate-800 overflow-hidden shadow-xl sticky top-20">
+        {/* Right: Curriculum Accordion Sidebar (4 cols) — Cố định & cuộn độc lập theo chuẩn Coursera/YouTube */}
+        <div className="lg:col-span-4 sticky top-20 h-[calc(100vh-6rem)] flex flex-col">
+          <div className="bg-[#0f172a] rounded-2xl border border-slate-800 overflow-hidden shadow-xl flex-1 flex flex-col min-h-0">
             {/* Curriculum Header */}
-            <div className="p-4 bg-gradient-to-r from-slate-900 to-[#1a2333] border-b border-slate-800 flex items-center justify-between">
+            <div className="p-4 bg-gradient-to-r from-slate-900 to-[#1a2333] border-b border-slate-800 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
-                <Layers className="w-4 h-4 text-[#e74c3c]" />
+                <Layers className="w-4 h-4 text-indigo-400" />
                 <h3 className="font-bold text-sm text-white">CHƯƠNG MỤC KHÓA HỌC</h3>
               </div>
               <span className="text-[11px] font-mono text-emerald-400 font-bold">
@@ -850,7 +868,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
             </div>
 
             {/* Sections Accordion */}
-            <div className="divide-y divide-slate-800/80 max-h-[72vh] overflow-y-auto">
+            <div className="divide-y divide-slate-800/80 flex-1 overflow-y-auto">
               {course.sections.map((section, secIdx) => {
                 const isExpanded = expandedSections[section.id] ?? true;
                 const sectionCompletedCount = section.lessons.filter(l => completedLessonIds.includes(l.id)).length;

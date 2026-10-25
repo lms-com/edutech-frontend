@@ -550,15 +550,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
           </div>
         )}
 
-        {/* Device Fingerprint Badge */}
+        {/* Device Security Session Badge */}
         <div className="px-6 pt-4">
-          <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-[11px]">
+          <div className="p-2.5 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center justify-between text-[11px]">
             <div className="flex items-center gap-2 text-slate-600">
-              <Laptop className="w-4 h-4 text-blue-500 shrink-0" />
-              <span className="font-medium">Device Fingerprint:</span>
+              <Laptop className="w-4 h-4 text-indigo-500 shrink-0" />
+              <span className="font-medium text-slate-600">Thiết bị đăng nhập:</span>
             </div>
-            <span className="font-mono text-slate-700 font-bold bg-white px-2 py-0.5 rounded border border-slate-200 max-w-[170px] truncate" title={fingerprint}>
-              {fingerprint || 'Đang tạo...'}
+            <span className="inline-flex items-center gap-1.5 text-emerald-700 font-medium bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200/60">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Trình duyệt an toàn (Đã xác thực)
             </span>
           </div>
         </div>

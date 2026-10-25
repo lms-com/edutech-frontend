@@ -129,7 +129,7 @@ export const Header: React.FC<HeaderProps> = ({
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
-              <BookOpen className={`w-4 h-4 ${currentPortal === 'learner' ? 'text-[#e74c3c]' : 'text-slate-400'}`} />
+              <BookOpen className={`w-4 h-4 ${currentPortal === 'learner' ? 'text-indigo-600' : 'text-slate-400'}`} />
               Khóa học
             </button>
 
@@ -232,8 +232,9 @@ export const Header: React.FC<HeaderProps> = ({
                       <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold border border-indigo-200">
                         {primaryRoleLabel(user.roles)}
                       </span>
-                      <span className="font-mono text-slate-400 truncate max-w-[130px]">
-                        {fingerprint ? `Thiết bị: ${fingerprint.substring(0, 10)}...` : 'Bảo mật'}
+                      <span className="inline-flex items-center gap-1 text-emerald-600 font-medium text-[10px]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        Thiết bị bảo mật
                       </span>
                     </div>
                   </div>

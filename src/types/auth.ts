@@ -68,6 +68,7 @@ export interface RegisterInitRequest {
   email: string;
   fullName: string;
   password: string;
+  deviceFingerPrint?: string;
 }
 
 export interface RegisterConfirmRequest {

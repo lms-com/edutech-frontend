@@ -267,7 +267,7 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
       setIsWaitingPaymentOpen(true);
 
       // Mở cổng VNPay ở Tab mới (Phương án 1) - Giữ tab hiện tại không bị ảnh hưởng URL history
-      window.open(response.paymentUrl, '_blank', 'noopener,noreferrer');
+      window.open(response.paymentUrl, '_blank');
     } catch (err: any) {
       setCheckoutError(err?.message || 'Không tạo được đơn hàng. Kiểm tra bạn đã đăng nhập chưa.');
     } finally {
@@ -286,22 +286,25 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
       </button>
 
       {/* Hero Header Area */}
-      <div className="bg-[#1e293b] text-white p-6 md:p-10 rounded-3xl shadow-xl relative overflow-hidden">
-        <div className="max-w-4xl space-y-4">
+      <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white p-6 md:p-10 rounded-3xl shadow-xl relative overflow-hidden border border-slate-800">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="max-w-4xl space-y-4 relative z-10">
           <div className="flex flex-wrap items-center gap-2">
             {course.category && (
-              <span className="px-3 py-1 rounded-full bg-[#e74c3c] text-white text-xs font-bold">
+              <span className="px-3 py-1 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-bold shadow-xs">
                 {course.category}
               </span>
             )}
             {course.level && (
-              <span className="px-3 py-1 rounded-full bg-slate-800 text-slate-300 text-xs font-medium">
+              <span className="px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700/80 text-slate-300 text-xs font-medium">
                 {course.level}
               </span>
             )}
-            <span className="px-3 py-1 rounded-full bg-emerald-900/60 text-emerald-300 text-xs font-semibold flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              Chứng chỉ Xác thực
+            <span className="px-3 py-1 rounded-full bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 shadow-xs">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              Chứng chỉ Xác thực QR
             </span>
           </div>
 
@@ -317,21 +320,21 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
 
           <div className="flex flex-wrap items-center gap-4 md:gap-6 text-xs text-slate-300 pt-2">
             {reviewsCount > 0 && (
-              <div className="flex items-center gap-1.5 text-amber-400 font-bold">
+              <div className="flex items-center gap-1.5 text-amber-400 font-bold bg-amber-400/10 px-3 py-1 rounded-xl border border-amber-400/20">
                 <Star className="w-4 h-4 fill-amber-400" />
                 <span>{rating}</span>
-                <span className="text-slate-400 font-normal">({reviewsCount} đánh giá)</span>
+                <span className="text-slate-300 font-normal">({reviewsCount} đánh giá)</span>
               </div>
             )}
             {course.totalLessons > 0 && (
-              <div className="flex items-center gap-1.5">
-                <BookOpen className="w-4 h-4 text-slate-400" />
+              <div className="flex items-center gap-1.5 bg-slate-800/80 px-3 py-1 rounded-xl border border-slate-700">
+                <BookOpen className="w-4 h-4 text-blue-400" />
                 <span>{course.totalLessons} bài học</span>
               </div>
             )}
             {course.durationHours > 0 && (
-              <div className="flex items-center gap-1.5">
-                <Clock className="w-4 h-4 text-slate-400" />
+              <div className="flex items-center gap-1.5 bg-slate-800/80 px-3 py-1 rounded-xl border border-slate-700">
+                <Clock className="w-4 h-4 text-indigo-400" />
                 <span>{formatDuration(Math.round(course.durationHours * 60))} video</span>
               </div>
             )}
@@ -344,36 +347,38 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
         {/* Left Column */}
         <div className="lg:col-span-8 space-y-8">
           {/* Curriculum Accordion */}
-          <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-            <div>
-              <h2 className="text-lg font-bold text-[#2c3e50]">Giáo trình khóa học</h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                {course.sections.length} chương • {course.totalLessons} bài học
-                {course.durationHours > 0 && <> • Thời lượng {formatDuration(Math.round(course.durationHours * 60))}</>}
-              </p>
+          <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200/90 shadow-xs space-y-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Giáo trình khóa học</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {course.sections.length} chương • {course.totalLessons} bài học
+                  {course.durationHours > 0 && <> • Thời lượng {formatDuration(Math.round(course.durationHours * 60))}</>}
+                </p>
+              </div>
             </div>
 
             {course.sections.length === 0 ? (
-              <div className="p-6 text-center text-xs text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+              <div className="p-8 text-center text-xs text-slate-500 bg-slate-50/80 rounded-2xl border border-dashed border-slate-200">
                 Giáo trình của khóa học đang được cập nhật.
               </div>
             ) : (
-              <div className="border border-slate-200 rounded-xl divide-y divide-slate-200 overflow-hidden">
+              <div className="border border-slate-200/80 rounded-2xl divide-y divide-slate-100 overflow-hidden shadow-2xs">
                 {course.sections.map(section => {
                   const isOpen = expandedSection === section.id;
                   return (
                     <div key={section.id}>
                       <button
                         onClick={() => setExpandedSection(isOpen ? '' : section.id)}
-                        className="w-full p-4 text-left bg-slate-50 hover:bg-slate-100 flex items-center justify-between transition-colors cursor-pointer"
+                        className="w-full p-4 text-left bg-slate-50/70 hover:bg-slate-100/80 flex items-center justify-between transition-colors cursor-pointer"
                       >
-                        <div className="flex items-center gap-2">
-                          {isOpen ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
-                          <span className="font-bold text-xs md:text-sm text-[#2c3e50]">
+                        <div className="flex items-center gap-2.5">
+                          {isOpen ? <ChevronUp className="w-4 h-4 text-indigo-600" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                          <span className="font-bold text-xs md:text-sm text-slate-900">
                             {section.title}
                           </span>
                         </div>
-                        <span className="text-xs text-slate-500 font-medium">
+                        <span className="text-xs text-slate-500 font-semibold bg-white px-2.5 py-0.5 rounded-lg border border-slate-200/80">
                           {section.lessons.length} bài học
                         </span>
                       </button>
@@ -381,19 +386,19 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                       {isOpen && (
                         <div className="p-4 bg-white space-y-2 divide-y divide-slate-100">
                           {section.lessons.map(lesson => (
-                            <div key={lesson.id} className="pt-2 flex items-center justify-between text-xs text-slate-700">
-                              <div className="flex items-center gap-2.5">
-                                <PlayCircle className="w-4 h-4 text-[#e74c3c]" />
-                                <span className="font-medium">{lesson.title}</span>
+                            <div key={lesson.id} className="pt-2.5 pb-0.5 flex items-center justify-between text-xs text-slate-700 hover:text-slate-900 transition-colors">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <PlayCircle className="w-4 h-4 text-blue-600 shrink-0" />
+                                <span className="font-medium truncate">{lesson.title}</span>
                               </div>
-                              <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-3 shrink-0">
                                 {lesson.isPreview && (
-                                  <span className="text-[10px] font-bold text-[#e74c3c] bg-[#e74c3c]/10 px-2 py-0.5 rounded">
+                                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-md">
                                     Học thử
                                   </span>
                                 )}
                                 {lesson.durationMinutes > 0 && (
-                                  <span className="font-mono text-slate-400">
+                                  <span className="font-mono text-slate-400 text-[11px]">
                                     {formatDuration(lesson.durationMinutes)}
                                   </span>
                                 )}
@@ -402,9 +407,12 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                           ))}
 
                           {section.quiz && (
-                            <div className="pt-2 flex items-center justify-between text-xs text-amber-700 bg-amber-50/50 p-2 rounded">
-                              <span className="font-bold">📝 {section.quiz.title}</span>
-                              <span className="text-[11px] font-semibold">
+                            <div className="pt-2.5 pb-1 flex items-center justify-between text-xs text-amber-800 bg-amber-50/60 border border-amber-200/60 p-2.5 rounded-xl">
+                              <span className="font-bold flex items-center gap-1.5">
+                                <span>📝</span>
+                                <span>{section.quiz.title}</span>
+                              </span>
+                              <span className="text-[11px] font-semibold text-amber-700">
                                 {section.quiz.questions.length > 0
                                   ? `${section.quiz.questions.length} câu trắc nghiệm`
                                   : 'Chưa có câu hỏi'}
@@ -442,20 +450,22 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
           )}
 
           {/* Reviews List */}
-          <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-5">
-            <div>
-              <h2 className="text-lg font-bold text-[#2c3e50]">Đánh giá từ học viên</h2>
-              {reviewsCount > 0 && (
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Trung bình {rating}/5 từ {reviewsCount} đánh giá
-                </p>
-              )}
+          <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200/90 shadow-xs space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Đánh giá từ học viên</h2>
+                {reviewsCount > 0 && (
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Trung bình {rating}/5 từ {reviewsCount} đánh giá thực tế
+                  </p>
+                )}
+              </div>
             </div>
 
             {reviewsCount > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 p-4 rounded-xl bg-slate-50 border border-slate-200 items-center">
-                <div className="text-center sm:border-r sm:border-slate-200 sm:pr-4 space-y-1">
-                  <div className="text-4xl font-black text-[#2c3e50]">{rating.toFixed(1)}</div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 p-5 rounded-2xl bg-slate-50/80 border border-slate-200/80 items-center">
+                <div className="text-center sm:border-r sm:border-slate-200 sm:pr-4 space-y-1.5">
+                  <div className="text-4xl font-black text-slate-900">{rating.toFixed(1)}</div>
                   <div className="flex items-center justify-center gap-0.5 text-amber-400">
                     {[1, 2, 3, 4, 5].map(star => (
                       <Star
@@ -464,7 +474,7 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                       />
                     ))}
                   </div>
-                  <p className="text-[11px] font-medium text-slate-500">{reviewsCount} lượt đánh giá</p>
+                  <p className="text-[11px] font-semibold text-slate-500">{reviewsCount} lượt đánh giá</p>
                 </div>
 
                 <div className="sm:col-span-2 space-y-2">
@@ -473,7 +483,7 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                     const percent = reviewsCount > 0 ? Math.round((count / reviewsCount) * 100) : 0;
                     return (
                       <div key={star} className="flex items-center gap-2.5 text-xs">
-                        <span className="w-11 font-semibold text-slate-700 flex items-center gap-1 shrink-0">
+                        <span className="w-12 font-bold text-slate-700 flex items-center gap-1 shrink-0">
                           {star} <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                         </span>
                         <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
@@ -482,7 +492,7 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                             style={{ width: `${percent}%` }}
                           />
                         </div>
-                        <span className="w-14 text-right text-[11px] text-slate-500 shrink-0">
+                        <span className="w-14 text-right text-[11px] font-mono text-slate-500 shrink-0">
                           {count} ({percent}%)
                         </span>
                       </div>
@@ -493,62 +503,63 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
             )}
 
             {isEnrolled ? (
-              <form onSubmit={handleSubmitReview} className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+              <form onSubmit={handleSubmitReview} className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4 space-y-3">
                 <div>
-                  <p className="text-xs font-bold text-slate-700">Đánh giá khóa học</p>
-                  <div className="mt-2 flex items-center gap-1" role="radiogroup" aria-label="Số sao đánh giá">
+                  <p className="text-xs font-bold text-slate-800">Đánh giá khóa học của bạn</p>
+                  <div className="mt-2 flex items-center gap-1.5" role="radiogroup" aria-label="Số sao đánh giá">
                     {[1, 2, 3, 4, 5].map(star => (
                       <button key={star} type="button" role="radio" aria-checked={reviewStar === star}
                         aria-label={`${star} sao`} onClick={() => setReviewStar(star)}
-                        className="rounded p-1 focus:outline-none focus:ring-2 focus:ring-amber-400">
+                        className="rounded-lg p-1 hover:scale-110 transition-transform focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer">
                         <Star className={`h-5 w-5 ${star <= reviewStar ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} />
                       </button>
                     ))}
                   </div>
                 </div>
                 <textarea required maxLength={2000} value={reviewComment} onChange={event => setReviewComment(event.target.value)}
-                  rows={3} placeholder="Chia sẻ trải nghiệm học của bạn..." className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs focus:border-indigo-400 focus:outline-none" />
-                {reviewSubmitError && <p role="alert" className="text-xs text-rose-700">{reviewSubmitError}</p>}
-                <button disabled={reviewSubmitting || !reviewComment.trim()} className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
+                  rows={3} placeholder="Chia sẻ cảm nhận, kiến thức thu hoạch được từ khóa học này..." className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none shadow-2xs" />
+                {reviewSubmitError && <p role="alert" className="text-xs text-rose-700 font-semibold">{reviewSubmitError}</p>}
+                <button disabled={reviewSubmitting || !reviewComment.trim()} className="rounded-xl bg-slate-900 hover:bg-slate-800 px-4 py-2 text-xs font-bold text-white shadow-xs transition disabled:opacity-50 cursor-pointer">
                   {reviewSubmitting ? 'Đang gửi...' : 'Gửi đánh giá'}
                 </button>
               </form>
             ) : (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
-                Chỉ học viên đã ghi danh và kích hoạt khóa học mới có thể gửi đánh giá và nhận xét.
+              <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 px-4 py-3 text-xs text-slate-600 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-slate-400 shrink-0" />
+                <span>Chỉ học viên đã ghi danh và kích hoạt khóa học mới có thể gửi đánh giá và nhận xét.</span>
               </div>
             )}
 
             {reviewsLoading && (
               <div className="flex items-center gap-2 text-xs text-slate-500 p-4">
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
                 Đang tải đánh giá...
               </div>
             )}
 
             {!reviewsLoading && reviewsError && (
-              <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-start gap-2">
+              <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-700 flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>{reviewsError}</span>
               </div>
             )}
 
             {!reviewsLoading && !reviewsError && reviewsCount === 0 && (
-              <div className="p-6 text-center text-xs text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                Khóa học chưa có đánh giá nào.
+              <div className="p-6 text-center text-xs text-slate-500 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                Khóa học chưa có đánh giá nào. Hãy là người đầu tiên trải nghiệm!
               </div>
             )}
 
-            <div className="space-y-4">
+            <div className="space-y-3">
               {reviews.map(review => (
-                <div key={review.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <div key={review.id} className="p-4 bg-slate-50/70 hover:bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2 transition-all">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-[#2c3e50] text-white flex items-center justify-center text-[11px] font-bold">
+                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-slate-900 to-indigo-900 text-white flex items-center justify-center text-[11px] font-black shadow-2xs">
                         {review.userName.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <p className="font-bold text-xs text-[#2c3e50]">{review.userName}</p>
+                        <p className="font-bold text-xs text-slate-900">{review.userName}</p>
                         <div className="flex items-center gap-0.5 text-amber-500">
                           {[...Array(review.rating)].map((_, i) => (
                             <Star key={i} className="w-3 h-3 fill-amber-400" />
@@ -556,10 +567,10 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                         </div>
                       </div>
                     </div>
-                    <span className="text-[11px] text-slate-400">{review.date}</span>
+                    <span className="text-[11px] font-medium text-slate-400">{review.date}</span>
                   </div>
                   {review.comment && (
-                    <p className="text-xs text-slate-600 leading-relaxed italic">
+                    <p className="text-xs text-slate-700 leading-relaxed italic pl-10">
                       "{review.comment}"
                     </p>
                   )}
@@ -570,8 +581,8 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
         </div>
 
         {/* Right Column: Sticky Pricing Card */}
-        <div className="lg:col-span-4 sticky top-24 space-y-4">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
+        <div className="lg:col-span-4 sticky top-20 space-y-4">
+          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xl overflow-hidden hover:shadow-2xl transition-all duration-300">
             <CourseThumbnail
               src={course.thumbnail}
               alt={course.title}
@@ -583,10 +594,10 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                 {promoResult?.valid && promoResult.finalPrice !== undefined && promoResult.finalPrice !== null ? (
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2">
-                      <span className="text-2xl font-black text-[#e74c3c]">
+                      <span className="text-2xl font-black text-blue-600 font-mono">
                         {formatVND(promoResult.finalPrice)}
                       </span>
-                      <span className="text-sm font-semibold text-slate-400 line-through">
+                      <span className="text-sm font-semibold text-slate-400 line-through font-mono">
                         {formatVND(course.price)}
                       </span>
                     </div>
@@ -596,12 +607,12 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                     </p>
                   </div>
                 ) : (
-                  <span className="text-2xl font-black text-[#e74c3c]">
+                  <span className="text-2xl font-black text-slate-900 font-mono">
                     {course.price > 0 ? formatVND(course.price) : 'Miễn phí'}
                   </span>
                 )}
-                <p className="text-xs text-slate-500">
-                  {isEnrolled ? 'Bạn đã có quyền học khóa này.' : course.price > 0 ? 'Thanh toán một lần, truy cập trọn đời' : 'Ghi danh miễn phí để bắt đầu học.'}
+                <p className="text-xs text-slate-500 font-medium">
+                  {isEnrolled ? 'Bạn đã sở hữu quyền học khóa này.' : course.price > 0 ? 'Thanh toán một lần, truy cập trọn đời' : 'Ghi danh miễn phí để bắt đầu học.'}
                 </p>
               </div>
 
@@ -624,14 +635,14 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                             void handleApplyPromo();
                           }
                         }}
-                        className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-xl uppercase font-mono tracking-wider focus:outline-none focus:border-[#e74c3c]"
+                        className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-xl uppercase font-mono tracking-wider focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20"
                       />
                     </div>
                     <button
                       type="button"
                       disabled={promoValidating || !promoCode.trim()}
                       onClick={() => void handleApplyPromo()}
-                      className="px-3.5 py-2 text-xs font-bold rounded-xl bg-[#2c3e50] hover:bg-[#1a252f] text-white transition disabled:opacity-50 cursor-pointer flex items-center gap-1 shrink-0"
+                      className="px-3.5 py-2 text-xs font-bold rounded-xl bg-slate-900 hover:bg-slate-800 text-white transition disabled:opacity-50 cursor-pointer flex items-center gap-1 shrink-0 shadow-xs"
                     >
                       {promoValidating ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Áp dụng'}
                     </button>
@@ -648,7 +659,7 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                       ) : (
                         <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                       )}
-                      <span className="leading-relaxed">{promoResult.message}</span>
+                      <span className="leading-relaxed font-medium">{promoResult.message}</span>
                     </div>
                   )}
                 </div>
@@ -665,18 +676,22 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                 {isEnrolled ? (
                   <button
                     onClick={() => onStartLearning(course)}
-                    className="w-full py-3.5 px-4 rounded-2xl bg-[#2c3e50] hover:bg-[#1a252f] text-white font-bold text-sm shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full py-3.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-lg shadow-emerald-900/20 transition-all flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.01]"
                   >
-                    <PlayCircle className="w-5 h-5 text-[#e74c3c]" />
-                    <span>Tiếp tục học</span>
+                    <PlayCircle className="w-5 h-5 text-white" />
+                    <span>Tiếp tục học ngay</span>
                   </button>
                 ) : course.price > 0 ? (
                   <button
                     disabled={isCheckingOut}
                     onClick={handleCheckoutVNPay}
-                    className="w-full py-3.5 px-4 rounded-2xl bg-[#e74c3c] hover:bg-[#c0392b] text-white font-bold text-sm shadow-xl shadow-red-900/20 transition-all hover:scale-[1.02] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 text-white font-bold text-sm shadow-xl shadow-blue-900/25 transition-all hover:scale-[1.01] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                   >
-                    {isCheckingOut ? <span>Đang tạo đơn hàng...</span> : <><ShieldCheck className="w-5 h-5" /><span>Đăng ký và thanh toán VNPay</span></>}
+                    {isCheckingOut ? (
+                      <span className="flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Đang tạo đơn hàng...</span>
+                    ) : (
+                      <><ShieldCheck className="w-5 h-5" /><span>Đăng ký & Thanh toán VNPay</span></>
+                    )}
                   </button>
                 ) : (
                   <button
@@ -689,7 +704,7 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                       catch (err: any) { setCheckoutError(err?.message || 'Không thể ghi danh khóa học.'); }
                       finally { setIsEnrollingFree(false); }
                     }}
-                    className="w-full py-3.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    className="w-full py-3.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 hover:scale-[1.01]"
                   >
                     {isEnrollingFree ? 'Đang ghi danh...' : 'Ghi danh miễn phí'}
                   </button>
@@ -702,7 +717,7 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                   <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span>Bảo vệ học viên & Hoàn tiền 3 ngày</span>
                 </div>
-                <p className="text-[11px] text-slate-600 leading-relaxed">
+                <p className="text-[11px] text-slate-600 leading-relaxed font-medium">
                   Đảm bảo hoàn tiền 100% trong vòng 3 ngày nếu nội dung không đúng cam kết hoặc giảng viên không hỗ trợ. Yên tâm trải nghiệm học tập an toàn.
                 </p>
               </div>

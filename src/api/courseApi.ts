@@ -66,6 +66,14 @@ export interface CreateLessonPayload {
   passScore?: number;
 }
 
+export interface UpdateLessonContentPayload {
+  title?: string;
+  freePreview?: boolean;
+  videoUrl?: string;
+  duration?: number;
+  passScore?: number;
+}
+
 export interface AdminCourseFilterParams extends CourseFilterParams {
   status?: string;
   instructorId?: string;
@@ -124,6 +132,11 @@ const deleteSection = async (sectionId: string): Promise<void> => {
 const createLesson = async (sectionId: string, payload: CreateLessonPayload): Promise<void> => {
   const res = await axiosClient.post<ApiEnvelope<unknown>>(`${COURSE_BASE}/sections/${sectionId}/lessons`, payload);
   if (typeof res?.code === 'number' && res.code !== 200) throw new Error(res.message || 'Không tạo được bài học.');
+};
+
+const updateLessonContent = async (lessonId: string, payload: UpdateLessonContentPayload): Promise<void> => {
+  const res = await axiosClient.put<ApiEnvelope<unknown>>(`${COURSE_BASE}/lessons/${lessonId}/content`, payload);
+  if (typeof res?.code === 'number' && res.code !== 200) throw new Error(res.message || 'Không cập nhật được bài học.');
 };
 
 const deleteLesson = async (lessonId: string): Promise<void> => {
@@ -213,6 +226,7 @@ export const courseApi = {
   updateSection,
   deleteSection,
   createLesson,
+  updateLessonContent,
   deleteLesson,
   getAdminCourses,
   approveCourse,

@@ -93,24 +93,24 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-200 shadow-xs print:hidden">
+    <header className="sticky top-0 z-40 bg-white/85 backdrop-blur-md border-b border-slate-200/80 shadow-2xs print:hidden transition-all">
       <div className="max-w-7xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between gap-4">
         {/* Left: Brand Logo & Navigation */}
-        <div className="flex items-center gap-8">
+        <div className="flex items-center gap-6 lg:gap-8">
           <div 
-            className="flex items-center gap-2.5 cursor-pointer group" 
+            className="flex items-center gap-3 cursor-pointer group" 
             onClick={() => onSelectPortal('learner')}
           >
-            <div className="w-10 h-10 rounded-xl bg-[#2c3e50] text-white flex items-center justify-center font-black text-sm shadow-md border border-[#e74c3c]/30 group-hover:scale-105 transition duration-200">
-              <GraduationCap className="w-6 h-6 text-[#e74c3c]" />
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-700 via-blue-600 to-sky-500 text-white flex items-center justify-center font-black text-sm shadow-md shadow-indigo-600/20 group-hover:scale-105 group-hover:shadow-indigo-600/30 transition-all duration-300">
+              <GraduationCap className="w-5 h-5 text-white" />
             </div>
             <div className="flex flex-col">
               <div className="flex items-center gap-1.5">
-                <span className="font-black text-lg tracking-tight text-[#2c3e50]">
-                  Edu<span className="text-[#e74c3c]">Tech</span>
+                <span className="font-black text-lg tracking-tight text-slate-900">
+                  Edu<span className="text-blue-600">Tech</span>
                 </span>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 uppercase">
-                  LMS
+                <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-600 border border-blue-200/60 uppercase tracking-wider">
+                  PRO
                 </span>
               </div>
               <span className="text-[10px] text-slate-400 font-medium -mt-1 hidden sm:block">
@@ -119,45 +119,45 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Primary Navigation Tabs */}
-          <nav className="hidden md:flex items-center gap-1 text-xs font-bold">
+          {/* Primary Navigation Capsule Switcher */}
+          <nav className="hidden md:flex items-center p-1 bg-slate-100/80 rounded-2xl border border-slate-200/60 text-xs font-bold gap-1">
             <button
               onClick={() => onSelectPortal('learner')}
-              className={`px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-all duration-200 cursor-pointer ${
                 currentPortal === 'learner'
-                  ? 'bg-slate-100 text-[#2c3e50] font-extrabold'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  ? 'bg-white text-slate-900 font-extrabold shadow-2xs border border-slate-200/80'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
               }`}
             >
-              <BookOpen className={`w-4 h-4 ${currentPortal === 'learner' ? 'text-[#e74c3c]' : 'text-slate-400'}`} />
-              Khóa học
+              <BookOpen className={`w-3.5 h-3.5 ${currentPortal === 'learner' ? 'text-blue-600' : 'text-slate-400'}`} />
+              <span>Khóa học</span>
             </button>
 
             {showInstructorPortal && (
               <button
                 onClick={() => onSelectPortal('instructor')}
-                className={`px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-all duration-200 cursor-pointer ${
                   currentPortal === 'instructor'
-                    ? 'bg-slate-100 text-[#2c3e50] font-extrabold'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    ? 'bg-white text-slate-900 font-extrabold shadow-2xs border border-slate-200/80'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                 }`}
               >
-                <Video className={`w-4 h-4 ${currentPortal === 'instructor' ? 'text-indigo-600' : 'text-slate-400'}`} />
-                Giảng dạy
+                <Video className={`w-3.5 h-3.5 ${currentPortal === 'instructor' ? 'text-indigo-600' : 'text-slate-400'}`} />
+                <span>Giảng dạy</span>
               </button>
             )}
 
             {showAdminPortal && (
               <button
                 onClick={() => onSelectPortal('admin')}
-                className={`px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-all duration-200 cursor-pointer ${
                   currentPortal === 'admin'
-                    ? 'bg-slate-100 text-[#2c3e50] font-extrabold'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    ? 'bg-white text-slate-900 font-extrabold shadow-2xs border border-slate-200/80'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                 }`}
               >
-                <Shield className={`w-4 h-4 ${currentPortal === 'admin' ? 'text-emerald-600' : 'text-slate-400'}`} />
-                Quản trị
+                <Shield className={`w-3.5 h-3.5 ${currentPortal === 'admin' ? 'text-emerald-600' : 'text-slate-400'}`} />
+                <span>Quản trị</span>
               </button>
             )}
           </nav>
@@ -168,22 +168,24 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Nút Hướng dẫn sử dụng toàn diện */}
           <button
             onClick={() => setIsGuideModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-[#2c3e50] hover:bg-slate-100 rounded-xl transition-all cursor-pointer border border-slate-200/60 shadow-2xs"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 rounded-xl transition-all cursor-pointer border border-slate-200/80 shadow-2xs hover:border-slate-300"
             title="Xem hướng dẫn sử dụng chi tiết dành cho học viên và giảng viên"
           >
-            <HelpCircle className="w-4 h-4 text-indigo-600" />
-            <span>Hướng dẫn</span>
+            <HelpCircle className="w-3.5 h-3.5 text-indigo-600" />
+            <span className="hidden sm:inline">Hướng dẫn</span>
           </button>
 
           {/* Quick Certificate Verify Link */}
-          {showPublicCertificateLookup && <button
-            onClick={onOpenPublicVerify}
-            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-[#2c3e50] hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
-            title="Tra cứu chứng chỉ công khai bằng mã QR"
-          >
-            <QrCode className="w-4 h-4 text-slate-500" />
-            <span>Tra cứu chứng chỉ</span>
-          </button>}
+          {showPublicCertificateLookup && (
+            <button
+              onClick={onOpenPublicVerify}
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 rounded-xl transition-all cursor-pointer border border-slate-200/80 shadow-2xs hover:border-slate-300"
+              title="Tra cứu chứng chỉ công khai bằng mã QR"
+            >
+              <QrCode className="w-3.5 h-3.5 text-slate-500" />
+              <span>Tra cứu chứng chỉ</span>
+            </button>
+          )}
 
           {/* Notification Popover */}
           <NotificationPopover
@@ -195,16 +197,16 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* User Profile avatar or Login CTA */}
           {isAuthenticated && user ? (
-            <div ref={dropdownRef} className="relative pl-2 border-l border-slate-200 user-profile-menu-container">
+            <div ref={dropdownRef} className="relative pl-2 border-l border-slate-200/80 user-profile-menu-container">
               <button
                 onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-                className="flex items-center gap-2 p-1.5 pr-2.5 rounded-xl hover:bg-slate-100 transition cursor-pointer text-left border border-transparent hover:border-slate-200"
+                className="flex items-center gap-2 p-1 pl-1.5 pr-2.5 rounded-2xl hover:bg-slate-100/80 transition-all cursor-pointer text-left border border-transparent hover:border-slate-200 shadow-2xs"
               >
-                <div className="w-8 h-8 rounded-xl bg-[#2c3e50] text-white font-bold flex items-center justify-center text-xs shadow-sm">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-slate-900 to-indigo-900 text-white font-black flex items-center justify-center text-xs shadow-xs ring-2 ring-indigo-500/20">
                   {user.fullName ? user.fullName.charAt(0).toUpperCase() : 'U'}
                 </div>
                 <div className="hidden lg:flex flex-col text-left">
-                  <span className="text-xs font-bold text-[#2c3e50] truncate max-w-[120px]">
+                  <span className="text-xs font-bold text-slate-800 truncate max-w-[120px]">
                     {user.fullName || user.email}
                   </span>
                   <span className="text-[10px] text-slate-400 font-medium">
@@ -216,24 +218,25 @@ export const Header: React.FC<HeaderProps> = ({
 
               {/* Profile Dropdown */}
               {profileDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                <div className="absolute right-0 mt-2 w-72 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200/80 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
                   {/* User info banner */}
-                  <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50">
+                  <div className="px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-slate-50/80 to-indigo-50/30">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl bg-[#2c3e50] text-white font-bold flex items-center justify-center text-sm shadow-sm shrink-0">
+                      <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-slate-900 to-indigo-900 text-white font-black flex items-center justify-center text-sm shadow-xs shrink-0 ring-2 ring-indigo-500/20">
                         {user.fullName ? user.fullName.charAt(0).toUpperCase() : 'U'}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-slate-800 truncate">{user.fullName}</p>
+                        <p className="text-xs font-bold text-slate-900 truncate">{user.fullName}</p>
                         <p className="text-[11px] text-slate-400 truncate">{user.email}</p>
                       </div>
                     </div>
                     <div className="mt-2.5 flex items-center justify-between gap-1 text-[10px]">
-                      <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold border border-indigo-200">
+                      <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold border border-indigo-200/80">
                         {primaryRoleLabel(user.roles)}
                       </span>
-                      <span className="font-mono text-slate-400 truncate max-w-[130px]">
-                        {fingerprint ? `Thiết bị: ${fingerprint.substring(0, 10)}...` : 'Bảo mật'}
+                      <span className="inline-flex items-center gap-1 text-emerald-600 font-medium text-[10px]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        Thiết bị bảo mật
                       </span>
                     </div>
                   </div>
@@ -247,7 +250,7 @@ export const Header: React.FC<HeaderProps> = ({
                       onClick={() => { setProfileDropdownOpen(false); onSelectPortal('learner'); }}
                       className="w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition cursor-pointer"
                     >
-                      <BookOpen className="w-4 h-4 text-[#e74c3c]" />
+                      <BookOpen className="w-4 h-4 text-[#2563eb]" />
                       Trang Học viên
                     </button>
                     {onOpenOrderHistory && (
@@ -336,10 +339,10 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </div>
           ) : (
-            <div className="pl-2 border-l border-slate-200 flex items-center gap-2">
+            <div className="pl-2 border-l border-slate-200/80 flex items-center gap-2">
               <button
                 onClick={onOpenAuthModal}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-[#e74c3c] hover:bg-[#c0392b] text-white shadow-sm transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/20 hover:shadow-blue-600/30 transition-all cursor-pointer"
               >
                 <LogIn className="w-3.5 h-3.5" />
                 <span>Đăng nhập</span>
@@ -350,49 +353,55 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Mobile Bottom Navigation Bar */}
-      <div className="md:hidden flex items-center justify-around border-t border-slate-200 py-2 bg-white text-[11px] font-bold">
+      <div className="md:hidden flex items-center justify-around border-t border-slate-200/80 py-2 bg-white/95 backdrop-blur text-[11px] font-bold">
         <button
           onClick={() => onSelectPortal('learner')}
-          className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors ${
-            currentPortal === 'learner' ? 'bg-[#2c3e50] text-white' : 'text-slate-600'
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all ${
+            currentPortal === 'learner' 
+              ? 'bg-slate-900 text-white shadow-xs' 
+              : 'text-slate-600 hover:text-slate-900'
           }`}
         >
           <BookOpen className="w-4 h-4" />
-          Khóa học
+          <span>Khóa học</span>
         </button>
 
         {showInstructorPortal && (
           <button
             onClick={() => onSelectPortal('instructor')}
-            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors ${
-              currentPortal === 'instructor' ? 'bg-[#2c3e50] text-white' : 'text-slate-600'
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all ${
+              currentPortal === 'instructor' 
+                ? 'bg-indigo-600 text-white shadow-xs' 
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <Video className="w-4 h-4" />
-            Giảng dạy
+            <span>Giảng dạy</span>
           </button>
         )}
 
         {showAdminPortal && (
           <button
             onClick={() => onSelectPortal('admin')}
-            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors ${
-              currentPortal === 'admin' ? 'bg-[#2c3e50] text-white' : 'text-slate-600'
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all ${
+              currentPortal === 'admin' 
+                ? 'bg-emerald-600 text-white shadow-xs' 
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <Shield className="w-4 h-4" />
-            Quản trị
+            <span>Quản trị</span>
           </button>
         )}
 
         {showPublicCertificateLookup && (
-        <button
-          onClick={onOpenPublicVerify}
-          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900"
-        >
-          <QrCode className="w-4 h-4" />
-          Tra cứu
-        </button>
+          <button
+            onClick={onOpenPublicVerify}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-slate-600 hover:text-slate-900"
+          >
+            <QrCode className="w-4 h-4" />
+            <span>Tra cứu</span>
+          </button>
         )}
       </div>
 

@@ -6,7 +6,7 @@ import {
   ArrowLeft, Award, CheckCircle2, Circle, PlayCircle, HelpCircle, 
   ChevronDown, ChevronUp, FileText, Download, MessageSquare, Send, 
   Sparkles, ShieldCheck, Check, Clock, BookOpen, Layers, CheckCheck, AlertCircle, Loader2,
-  Heart, Reply, Trash2, CornerDownRight, RefreshCw, User
+  Heart, Reply, Trash2, CornerDownRight, RefreshCw, User, Star, X
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import enrollmentApi, { type EnrollmentDto } from '../../api/enrollmentApi';
@@ -19,6 +19,8 @@ interface LearningRoomProps {
   enrollment: EnrollmentDto | null;
   /** Chế độ xem trước dành cho giảng viên/quản trị, không ghi tiến độ hoặc làm quiz. */
   previewMode?: boolean;
+  initialLessonId?: string;
+  onSelectLesson?: (lessonId: string) => void;
   onBack: () => void;
   onOpenCertificate: () => void;
 }
@@ -27,6 +29,8 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
   course,
   enrollment,
   previewMode = false,
+  initialLessonId,
+  onSelectLesson,
   onBack,
   onOpenCertificate
 }) => {
@@ -35,9 +39,25 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
   const allQuizzes = course.sections.map(s => s.quiz).filter((q): q is Quiz => !!q);
   const totalItemsCount = allLessons.length + allQuizzes.length;
 
-  const [currentLessonId, setCurrentLessonId] = useState<string>(
-    allLessons[0]?.id || ''
-  );
+  const [currentLessonId, setCurrentLessonId] = useState<string>(() => {
+    if (initialLessonId && allLessons.some(l => l.id === initialLessonId)) {
+      return initialLessonId;
+    }
+    return allLessons[0]?.id || '';
+  });
+  const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (initialLessonId && initialLessonId !== currentLessonId && allLessons.some(l => l.id === initialLessonId)) {
+      setCurrentLessonId(initialLessonId);
+    }
+  }, [initialLessonId]);
+
+  const selectLesson = (id: string) => {
+    setAutoNextCountdown(null);
+    setCurrentLessonId(id);
+    onSelectLesson?.(id);
+  };
   const [completedLessonIds, setCompletedLessonIds] = useState<string[]>([]);
   const [progressLoading, setProgressLoading] = useState<boolean>(!!enrollment);
   const [progressError, setProgressError] = useState<string | null>(null);
@@ -76,6 +96,37 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
       setAttachmentsError(e?.message || 'Không thể tải tài liệu đính kèm.');
     } finally {
       setLoadingAttachments(false);
+    }
+  };
+
+  // Review Modal State
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [reviewStar, setReviewStar] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewSuccessMsg, setReviewSuccessMsg] = useState('');
+  const [reviewError, setReviewError] = useState<string | null>(null);
+
+  const handleSubmitCourseReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reviewComment.trim()) return;
+    setReviewSubmitting(true);
+    setReviewError(null);
+    try {
+      await enrollmentApi.submitReview(course.id, {
+        star: reviewStar,
+        comment: reviewComment.trim(),
+      });
+      setReviewSuccessMsg('Cảm ơn bạn đã gửi đánh giá khóa học!');
+      setTimeout(() => {
+        setIsReviewModalOpen(false);
+        setReviewSuccessMsg('');
+        setReviewComment('');
+      }, 2000);
+    } catch (err: any) {
+      setReviewError(err?.message || 'Không thể gửi đánh giá.');
+    } finally {
+      setReviewSubmitting(false);
     }
   };
 
@@ -266,20 +317,87 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
     }));
   };
 
+  useEffect(() => {
+    if (autoNextCountdown === null) return;
+    if (autoNextCountdown <= 0) {
+      const nextLesson = allLessons[currentLessonIndex + 1];
+      if (nextLesson) {
+        selectLesson(nextLesson.id);
+      }
+      setAutoNextCountdown(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setAutoNextCountdown(prev => (prev !== null ? prev - 1 : null));
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [autoNextCountdown, currentLessonIndex, allLessons]);
+
+  const handleVideoEnded = () => {
+    if (currentLessonIndex < allLessons.length - 1) {
+      setAutoNextCountdown(5);
+    }
+  };
+
   const handleNextLesson = () => {
     if (currentLessonIndex < allLessons.length - 1) {
-      setCurrentLessonId(allLessons[currentLessonIndex + 1].id);
+      selectLesson(allLessons[currentLessonIndex + 1].id);
     }
   };
 
   const handlePrevLesson = () => {
     if (currentLessonIndex > 0) {
-      setCurrentLessonId(allLessons[currentLessonIndex - 1].id);
+      selectLesson(allLessons[currentLessonIndex - 1].id);
     }
   };
 
+  const handleSeekToTime = (seconds: number) => {
+    const video = document.querySelector('video');
+    if (video) {
+      video.currentTime = seconds;
+      video.play().catch(() => {});
+    }
+  };
+
+  const renderCommentWithTimestamps = (text: string) => {
+    const regex = /\[(\d{1,2}):(\d{2})\]/g;
+    const elements: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = regex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        elements.push(text.substring(lastIndex, match.index));
+      }
+      const m = parseInt(match[1], 10);
+      const s = parseInt(match[2], 10);
+      const totalSec = m * 60 + s;
+      const tag = match[0];
+
+      elements.push(
+        <button
+          key={`${match.index}-${tag}`}
+          type="button"
+          onClick={() => handleSeekToTime(totalSec)}
+          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 hover:text-white font-mono text-[11px] font-bold border border-blue-500/30 transition-colors cursor-pointer"
+          title={`Bấm để chuyển video tới ${tag}`}
+        >
+          <Clock className="w-3 h-3 inline-block" />
+          {tag}
+        </button>
+      );
+      lastIndex = regex.lastIndex;
+    }
+
+    if (lastIndex < text.length) {
+      elements.push(text.substring(lastIndex));
+    }
+
+    return elements.length > 0 ? elements : text;
+  };
+
   return (
-    <div className="min-h-screen bg-[#1e293b] text-slate-100 flex flex-col font-sans selection:bg-[#e74c3c]/30">
+    <div className="min-h-screen bg-[#1e293b] text-slate-100 flex flex-col font-sans selection:bg-[#2563eb]/30">
       {/* Top Bar (Cinema Mode Header) */}
       <header className="bg-[#0f172a] border-b border-slate-800 px-4 md:px-6 py-3 sticky top-0 z-30 shadow-md">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
@@ -310,7 +428,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
               <div className="w-24 md:w-32 h-2 bg-slate-800 rounded-full overflow-hidden">
                 <div 
                   className={`h-full transition-all duration-500 rounded-full ${
-                    isAllCompleted ? 'bg-[#27ae60]' : 'bg-[#e74c3c]'
+                    isAllCompleted ? 'bg-[#27ae60]' : 'bg-[#2563eb]'
                   }`}
                   style={{ width: `${progressPercent}%` }}
                 />
@@ -329,7 +447,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
               disabled={!canGetCertificate}
               className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-xl font-bold text-xs transition-all shadow-md ${
                 canGetCertificate
-                  ? 'bg-[#e74c3c] hover:bg-[#c0392b] text-white animate-bounce ring-2 ring-amber-300/40 cursor-pointer shadow-red-900/30'
+                  ? 'bg-[#2563eb] hover:bg-[#1d4ed8] text-white animate-bounce ring-2 ring-amber-300/40 cursor-pointer shadow-red-900/30'
                   : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60'
               }`}
               title={canGetCertificate ? 'Bấm để xem và tải chứng chỉ tốt nghiệp!' : 'Hoàn thành 100% bài học để mở khóa chứng chỉ'}
@@ -337,6 +455,18 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
               <Award className="w-4 h-4 text-amber-300" />
               <span>{canGetCertificate ? 'Nhận Chứng Chỉ Ngay 🎓' : 'Chứng chỉ (Khóa)'}</span>
             </button>
+
+            {/* Review Course Button */}
+            {!previewMode && (
+              <button
+                onClick={() => setIsReviewModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 cursor-pointer transition-colors shadow-sm"
+                title="Đánh giá & nhận xét khóa học này"
+              >
+                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                <span className="hidden sm:inline">Đánh giá</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -386,20 +516,59 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
         <div className="lg:col-span-8 flex flex-col gap-5">
           {/* HLS Video Player */}
           {currentLesson && (
-            <VideoPlayer
-              lessonId={currentLesson.id}
-              lessonTitle={currentLesson.title}
-              mediaId={currentLesson.mediaId}
-              isEncrypted={currentLesson.isHlsEncrypted}
-              onLessonComplete={handleLessonComplete}
-              isCompleted={completedLessonIds.includes(currentLesson.id)}
-            />
+            <div className="relative rounded-2xl overflow-hidden shadow-2xl border border-slate-800">
+              <VideoPlayer
+                lessonId={currentLesson.id}
+                lessonTitle={currentLesson.title}
+                mediaId={currentLesson.mediaId}
+                isEncrypted={currentLesson.isHlsEncrypted}
+                onLessonComplete={handleLessonComplete}
+                onEnded={handleVideoEnded}
+                isCompleted={completedLessonIds.includes(currentLesson.id)}
+              />
+
+              {/* Lớp phủ đếm ngược tự chuyển bài khi kết thúc video (Auto-next Video) */}
+              {autoNextCountdown !== null && currentLessonIndex < allLessons.length - 1 && (
+                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/85 backdrop-blur-sm p-6 text-center animate-in fade-in duration-200">
+                  <div className="w-14 h-14 rounded-full border-4 border-[#2563eb] border-t-transparent animate-spin mb-3 flex items-center justify-center">
+                    <span className="font-mono font-bold text-white text-base">
+                      {autoNextCountdown}
+                    </span>
+                  </div>
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                    Tự động chuyển bài học sau {autoNextCountdown}s
+                  </span>
+                  <h3 className="text-sm md:text-base font-bold text-white mt-1 max-w-md truncate">
+                    Bài tiếp theo: {allLessons[currentLessonIndex + 1]?.title}
+                  </h3>
+                  <div className="flex items-center gap-3 mt-5">
+                    <button
+                      onClick={() => {
+                        const nextLesson = allLessons[currentLessonIndex + 1];
+                        if (nextLesson) selectLesson(nextLesson.id);
+                        setAutoNextCountdown(null);
+                      }}
+                      className="px-5 py-2 rounded-xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-bold shadow-lg transition-all flex items-center gap-2 cursor-pointer hover:scale-105"
+                    >
+                      <PlayCircle className="w-4 h-4" />
+                      Phát ngay
+                    </button>
+                    <button
+                      onClick={() => setAutoNextCountdown(null)}
+                      className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
+                    >
+                      Hủy
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {/* Lesson Navigation and Info Bar */}
           <div className="bg-[#0f172a] rounded-xl p-4 border border-slate-800 flex flex-wrap items-center justify-between gap-3 shadow-md">
             <div>
-              <span className="text-[11px] font-semibold text-[#e74c3c] uppercase tracking-wider">
+              <span className="text-[11px] font-semibold text-[#2563eb] uppercase tracking-wider">
                 Đang xem bài học
               </span>
               <h2 className="text-base md:text-lg font-bold text-white mt-0.5">
@@ -428,41 +597,41 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
           {/* Tabs Section (Overview, Resources, Q&A) */}
           <div className="bg-[#0f172a] rounded-xl border border-slate-800 overflow-hidden shadow-md">
             {/* Tab Headers */}
-            <div className="flex border-b border-slate-800 text-xs font-semibold">
+            <div className="p-2 border-b border-slate-800 bg-slate-950/60 flex items-center gap-1.5 text-xs font-bold">
               <button
                 onClick={() => setActiveTab('overview')}
-                className={`flex-1 py-3 px-4 text-center border-b-2 transition-colors flex items-center justify-center gap-2 ${
+                className={`flex-1 py-2 px-3 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer ${
                   activeTab === 'overview'
-                    ? 'border-[#e74c3c] text-[#e74c3c] bg-slate-800/40'
-                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
                 }`}
               >
                 <BookOpen className="w-3.5 h-3.5" />
-                Tổng quan & Ghi chú
+                <span>Tổng quan</span>
               </button>
 
               <button
                 onClick={() => setActiveTab('resources')}
-                className={`flex-1 py-3 px-4 text-center border-b-2 transition-colors flex items-center justify-center gap-2 ${
+                className={`flex-1 py-2 px-3 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer ${
                   activeTab === 'resources'
-                    ? 'border-[#e74c3c] text-[#e74c3c] bg-slate-800/40'
-                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
                 }`}
               >
                 <FileText className="w-3.5 h-3.5" />
-                Tài liệu ({attachments.length})
+                <span>Tài liệu ({attachments.length})</span>
               </button>
 
               <button
                 onClick={() => setActiveTab('qa')}
-                className={`flex-1 py-3 px-4 text-center border-b-2 transition-colors flex items-center justify-center gap-2 ${
+                className={`flex-1 py-2 px-3 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer ${
                   activeTab === 'qa'
-                    ? 'border-[#e74c3c] text-[#e74c3c] bg-slate-800/40'
-                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
                 }`}
               >
                 <MessageSquare className="w-3.5 h-3.5" />
-                Hỏi đáp Q&A
+                <span>Hỏi đáp Q&A</span>
               </button>
             </div>
 
@@ -595,7 +764,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                               target="_blank"
                               rel="noreferrer"
                               download
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-[#e74c3c] text-slate-200 hover:text-white rounded-lg transition-all border border-slate-700 hover:border-[#e74c3c] shadow-sm shrink-0 cursor-pointer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-[#2563eb] text-slate-200 hover:text-white rounded-lg transition-all border border-slate-700 hover:border-[#2563eb] shadow-sm shrink-0 cursor-pointer"
                             >
                               <Download className="w-3.5 h-3.5" />
                               Tải về
@@ -613,7 +782,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                   {/* Header & Refresh */}
                   <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                     <div className="flex items-center gap-2">
-                      <MessageSquare className="w-4 h-4 text-[#e74c3c]" />
+                      <MessageSquare className="w-4 h-4 text-[#2563eb]" />
                       <h4 className="text-xs font-bold text-white uppercase tracking-wider">
                         Hỏi đáp & Thảo luận ({comments.reduce((acc, c) => acc + 1 + (c.replies?.length || 0), 0)})
                       </h4>
@@ -638,13 +807,31 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
 
                   {/* Comment Input Box */}
                   <form onSubmit={e => void handlePostComment(e)} className="space-y-2.5">
+                    <div className="flex items-center justify-between pb-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const video = document.querySelector('video');
+                          const t = video ? Math.floor(video.currentTime) : 0;
+                          const m = Math.floor(t / 60).toString().padStart(2, '0');
+                          const s = (t % 60).toString().padStart(2, '0');
+                          const tag = `[${m}:${s}] `;
+                          setNewCommentText(prev => (prev.includes(tag) ? prev : tag + prev));
+                        }}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-indigo-300 hover:text-white bg-indigo-950/60 hover:bg-indigo-900 rounded-lg border border-indigo-700/50 transition cursor-pointer"
+                        title="Tự động lấy vị trí thời gian của video đang phát chèn vào câu hỏi"
+                      >
+                        <Clock className="w-3.5 h-3.5 text-indigo-400" />
+                        Đính kèm thời gian hiện tại
+                      </button>
+                    </div>
                     <div className="relative">
                       <textarea
                         rows={3}
                         value={newCommentText}
                         onChange={e => setNewCommentText(e.target.value)}
                         placeholder="Đặt câu hỏi hoặc chia sẻ thắc mắc về bài học này..."
-                        className="w-full p-3.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-[#e74c3c] leading-relaxed resize-none"
+                        className="w-full p-3.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 leading-relaxed resize-none"
                       />
                     </div>
                     <div className="flex items-center justify-between">
@@ -654,7 +841,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                       <button
                         type="submit"
                         disabled={submittingComment || !newCommentText.trim()}
-                        className="px-4 py-2 bg-[#e74c3c] hover:bg-[#c0392b] text-white text-xs font-bold rounded-xl shadow-md transition disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
                       >
                         {submittingComment ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                         Gửi câu hỏi
@@ -665,7 +852,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                   {/* Comments List */}
                   {commentsLoading ? (
                     <div className="py-12 text-center text-slate-500 flex flex-col items-center gap-2">
-                      <Loader2 className="w-6 h-6 animate-spin text-[#e74c3c]" />
+                      <Loader2 className="w-6 h-6 animate-spin text-[#2563eb]" />
                       <span className="text-xs">Đang tải câu hỏi thảo luận...</span>
                     </div>
                   ) : comments.length === 0 ? (
@@ -714,7 +901,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
 
                           {/* Content */}
                           <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line pl-10">
-                            {comment.content}
+                            {renderCommentWithTimestamps(comment.content)}
                           </p>
 
                           {/* Actions: Like & Reply */}
@@ -808,7 +995,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                                   </div>
 
                                   <p className="text-xs text-slate-300 leading-relaxed pl-5 whitespace-pre-line">
-                                    {reply.content}
+                                    {renderCommentWithTimestamps(reply.content)}
                                   </p>
 
                                   <div className="pl-5 pt-0.5">
@@ -835,13 +1022,13 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
           </div>
         </div>
 
-        {/* Right: Curriculum Accordion Sidebar (4 cols) */}
-        <div className="lg:col-span-4 flex flex-col gap-4">
-          <div className="bg-[#0f172a] rounded-2xl border border-slate-800 overflow-hidden shadow-xl sticky top-20">
+        {/* Right: Curriculum Accordion Sidebar (4 cols) — Cố định & cuộn độc lập theo chuẩn Coursera/YouTube */}
+        <div className="lg:col-span-4 sticky top-20 h-[calc(100vh-6rem)] flex flex-col">
+          <div className="bg-[#0f172a] rounded-2xl border border-slate-800 overflow-hidden shadow-xl flex-1 flex flex-col min-h-0">
             {/* Curriculum Header */}
-            <div className="p-4 bg-gradient-to-r from-slate-900 to-[#1a2333] border-b border-slate-800 flex items-center justify-between">
+            <div className="p-4 bg-gradient-to-r from-slate-900 to-[#1a2333] border-b border-slate-800 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
-                <Layers className="w-4 h-4 text-[#e74c3c]" />
+                <Layers className="w-4 h-4 text-indigo-400" />
                 <h3 className="font-bold text-sm text-white">CHƯƠNG MỤC KHÓA HỌC</h3>
               </div>
               <span className="text-[11px] font-mono text-emerald-400 font-bold">
@@ -850,7 +1037,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
             </div>
 
             {/* Sections Accordion */}
-            <div className="divide-y divide-slate-800/80 max-h-[72vh] overflow-y-auto">
+            <div className="divide-y divide-slate-800/80 flex-1 overflow-y-auto">
               {course.sections.map((section, secIdx) => {
                 const isExpanded = expandedSections[section.id] ?? true;
                 const sectionCompletedCount = section.lessons.filter(l => completedLessonIds.includes(l.id)).length;
@@ -895,10 +1082,10 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                           return (
                             <div
                               key={lesson.id}
-                              onClick={() => setCurrentLessonId(lesson.id)}
+                              onClick={() => selectLesson(lesson.id)}
                               className={`px-3 py-2.5 flex items-center justify-between gap-3 cursor-pointer transition-all ${
                                 isCurrent
-                                  ? 'bg-[#e74c3c]/10 border-l-4 border-[#e74c3c] text-white'
+                                  ? 'bg-[#2563eb]/10 border-l-4 border-[#2563eb] text-white'
                                   : 'hover:bg-slate-800/50 text-slate-300'
                               }`}
                             >
@@ -906,7 +1093,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
                                 {isDone ? (
                                   <CheckCircle2 className="w-4 h-4 text-[#27ae60] shrink-0" />
                                 ) : isCurrent ? (
-                                  <PlayCircle className="w-4 h-4 text-[#e74c3c] shrink-0 animate-pulse" />
+                                  <PlayCircle className="w-4 h-4 text-[#2563eb] shrink-0 animate-pulse" />
                                 ) : (
                                   <Circle className="w-4 h-4 text-slate-600 shrink-0" />
                                 )}
@@ -996,7 +1183,7 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
             {/* Quick Helper Badge */}
             <div className="p-3 bg-[#0b1320] border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
               <span>Đạt 100% mở khóa chứng chỉ A4</span>
-              <span className="text-[#e74c3c] font-semibold">EduTech LMS 2026</span>
+              <span className="text-[#2563eb] font-semibold">EduTech LMS 2026</span>
             </div>
           </div>
         </div>
@@ -1020,6 +1207,113 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
             }
           }}
         />
+      )}
+
+      {/* Review Modal */}
+      {isReviewModalOpen && !previewMode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-[#1e293b] border border-slate-700 w-full max-w-md rounded-2xl p-6 text-white shadow-2xl relative">
+            <button
+              onClick={() => {
+                setIsReviewModalOpen(false);
+                setReviewError(null);
+                setReviewSuccessMsg('');
+              }}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2 mb-4">
+              <Star className="w-6 h-6 fill-amber-400 text-amber-400" />
+              <h3 className="text-base font-bold">Đánh Giá Khóa Học</h3>
+            </div>
+
+            <p className="text-xs text-slate-400 mb-4 line-clamp-1">
+              Khóa học: <span className="text-white font-medium">{course.title}</span>
+            </p>
+
+            {reviewSuccessMsg ? (
+              <div className="p-4 bg-emerald-950/40 border border-emerald-600/50 rounded-xl text-center text-xs text-emerald-300 flex items-center justify-center gap-2">
+                <Check className="w-4 h-4 text-emerald-400" />
+                <span>{reviewSuccessMsg}</span>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmitCourseReview} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-2">
+                    Mức độ hài lòng của bạn:
+                  </label>
+                  <div className="flex items-center gap-2" role="radiogroup" aria-label="Đánh giá sao">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setReviewStar(s)}
+                        className="p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                      >
+                        <Star
+                          className={`w-7 h-7 ${
+                            s <= reviewStar
+                              ? 'fill-amber-400 text-amber-400'
+                              : 'text-slate-600'
+                          }`}
+                        />
+                      </button>
+                    ))}
+                    <span className="text-xs font-bold text-amber-300 ml-2">
+                      {reviewStar === 5 ? 'Tuyệt vời (5★)' : reviewStar === 4 ? 'Rất tốt (4★)' : reviewStar === 3 ? 'Bình thường (3★)' : reviewStar === 2 ? 'Kém (2★)' : 'Rất kém (1★)'}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Nhận xét & cảm nghĩ:
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    placeholder="Chia sẻ cảm nhận của bạn về nội dung bài giảng, giảng viên..."
+                    required
+                    maxLength={1000}
+                    className="w-full bg-[#0f172a] border border-slate-700 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  />
+                  <div className="text-right text-[10px] text-slate-500 mt-1">
+                    {reviewComment.length}/1000 ký tự
+                  </div>
+                </div>
+
+                {reviewError && (
+                  <div className="p-3 bg-rose-950/40 border border-rose-600/50 rounded-xl text-xs text-rose-300 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>{reviewError}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsReviewModalOpen(false)}
+                    disabled={reviewSubmitting}
+                    className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer transition-colors"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={reviewSubmitting || !reviewComment.trim()}
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors"
+                  >
+                    {reviewSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    <span>{reviewSubmitting ? 'Đang gửi...' : 'Gửi Đánh Giá'}</span>
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

@@ -29,7 +29,11 @@ export const authApi = {
   },
 
   registerInit: async (data: RegisterInitRequest): Promise<ApiResponse<string>> => {
-    return axiosClient.post('/iam-service/api/v1/auth/register-otp', data);
+    const deviceFingerPrint = await getDeviceFingerprint();
+    return axiosClient.post('/iam-service/api/v1/auth/register-otp', {
+      ...data,
+      deviceFingerPrint,
+    });
   },
 
   registerConfirm: async (data: Omit<RegisterConfirmRequest, 'deviceFingerPrint'>): Promise<ApiResponse<LoginResponse>> => {

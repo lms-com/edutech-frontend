@@ -151,7 +151,7 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
         {/* Header */}
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#e74c3c]/10 text-[#e74c3c] flex items-center justify-center">
+            <div className="w-10 h-10 rounded-2xl bg-[#2563eb]/10 text-[#2563eb] flex items-center justify-center">
               <ShoppingBag className="w-5 h-5" />
             </div>
             <div>
@@ -186,7 +186,7 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
 
           {loading ? (
             <div className="py-16 flex flex-col items-center justify-center text-slate-400 gap-2">
-              <Loader2 className="w-7 h-7 animate-spin text-[#e74c3c]" />
+              <Loader2 className="w-7 h-7 animate-spin text-[#2563eb]" />
               <p className="text-xs font-medium">Đang tải lịch sử giao dịch...</p>
             </div>
           ) : error ? (
@@ -243,7 +243,7 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
                         className="flex items-center justify-between gap-3 text-xs bg-slate-50 p-2.5 rounded-xl border border-slate-100"
                       >
                         <div className="flex items-center gap-2 min-w-0">
-                          <BookOpen className="w-4 h-4 text-[#e74c3c] shrink-0" />
+                          <BookOpen className="w-4 h-4 text-[#2563eb] shrink-0" />
                           <span className="font-semibold text-slate-800 truncate">
                             {item.courseName}
                           </span>

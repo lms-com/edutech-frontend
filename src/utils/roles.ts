@@ -6,7 +6,7 @@ import type { PortalType } from '../types';
  */
 const PORTAL_ROLES: Record<PortalType, string[]> = {
   learner: ['LEARNER', 'INSTRUCTOR', 'ADMIN'],
-  instructor: ['INSTRUCTOR', 'ADMIN'],
+  instructor: ['INSTRUCTOR'],
   admin: ['ADMIN'],
   public_verify: [],
 };

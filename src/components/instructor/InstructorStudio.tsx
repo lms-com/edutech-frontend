@@ -860,7 +860,8 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
       </div>
 
       {/* Studio Header Banner */}
-      <div className="bg-[#1e293b] text-white p-6 md:p-8 rounded-3xl shadow-lg space-y-4">
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 md:p-8 rounded-3xl shadow-xl border border-slate-800 space-y-4 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="space-y-1 max-w-2xl">
             <div className="flex flex-wrap items-center gap-2">
@@ -940,7 +941,7 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
       )}
 
       {/* Tabs Switcher */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 text-xs font-bold overflow-x-auto">
+      <div className="bg-slate-900/95 p-1.5 rounded-2xl shadow-md border border-slate-800 flex items-center gap-1.5 overflow-x-auto text-xs font-bold scrollbar-none">
         {[
           { id: 'curriculum', label: 'Soạn giáo trình (Curriculum)', icon: Layers },
           { id: 'settings', label: 'Cài đặt khóa học', icon: Settings },
@@ -954,8 +955,8 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
             onClick={() => setActiveTab(t.id as any)}
             className={`px-4 py-2.5 rounded-xl flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer ${
               activeTab === t.id
-                ? 'bg-[#2c3e50] text-white shadow-sm'
-                : 'text-slate-600 hover:bg-slate-100'
+                ? 'bg-indigo-600 text-white shadow-sm ring-1 ring-white/20'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
             }`}
           >
             <t.icon className="w-4 h-4" />

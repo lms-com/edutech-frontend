@@ -6,7 +6,7 @@ import {
   ArrowLeft, Award, CheckCircle2, Circle, PlayCircle, HelpCircle, 
   ChevronDown, ChevronUp, FileText, Download, MessageSquare, Send, 
   Sparkles, ShieldCheck, Check, Clock, BookOpen, Layers, CheckCheck, AlertCircle, Loader2,
-  Heart, Reply, Trash2, CornerDownRight, RefreshCw, User
+  Heart, Reply, Trash2, CornerDownRight, RefreshCw, User, Star, X
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import enrollmentApi, { type EnrollmentDto } from '../../api/enrollmentApi';
@@ -96,6 +96,37 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
       setAttachmentsError(e?.message || 'Không thể tải tài liệu đính kèm.');
     } finally {
       setLoadingAttachments(false);
+    }
+  };
+
+  // Review Modal State
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [reviewStar, setReviewStar] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewSuccessMsg, setReviewSuccessMsg] = useState('');
+  const [reviewError, setReviewError] = useState<string | null>(null);
+
+  const handleSubmitCourseReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reviewComment.trim()) return;
+    setReviewSubmitting(true);
+    setReviewError(null);
+    try {
+      await enrollmentApi.submitReview(course.id, {
+        star: reviewStar,
+        comment: reviewComment.trim(),
+      });
+      setReviewSuccessMsg('Cảm ơn bạn đã gửi đánh giá khóa học!');
+      setTimeout(() => {
+        setIsReviewModalOpen(false);
+        setReviewSuccessMsg('');
+        setReviewComment('');
+      }, 2000);
+    } catch (err: any) {
+      setReviewError(err?.message || 'Không thể gửi đánh giá.');
+    } finally {
+      setReviewSubmitting(false);
     }
   };
 
@@ -424,6 +455,18 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
               <Award className="w-4 h-4 text-amber-300" />
               <span>{canGetCertificate ? 'Nhận Chứng Chỉ Ngay 🎓' : 'Chứng chỉ (Khóa)'}</span>
             </button>
+
+            {/* Review Course Button */}
+            {!previewMode && (
+              <button
+                onClick={() => setIsReviewModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 cursor-pointer transition-colors shadow-sm"
+                title="Đánh giá & nhận xét khóa học này"
+              >
+                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                <span className="hidden sm:inline">Đánh giá</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -554,41 +597,41 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
           {/* Tabs Section (Overview, Resources, Q&A) */}
           <div className="bg-[#0f172a] rounded-xl border border-slate-800 overflow-hidden shadow-md">
             {/* Tab Headers */}
-            <div className="flex border-b border-slate-800 text-xs font-semibold">
+            <div className="p-2 border-b border-slate-800 bg-slate-950/60 flex items-center gap-1.5 text-xs font-bold">
               <button
                 onClick={() => setActiveTab('overview')}
-                className={`flex-1 py-3 px-4 text-center border-b-2 transition-colors flex items-center justify-center gap-2 ${
+                className={`flex-1 py-2 px-3 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer ${
                   activeTab === 'overview'
-                    ? 'border-[#2563eb] text-[#2563eb] bg-slate-800/40'
-                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
                 }`}
               >
                 <BookOpen className="w-3.5 h-3.5" />
-                Tổng quan & Ghi chú
+                <span>Tổng quan</span>
               </button>
 
               <button
                 onClick={() => setActiveTab('resources')}
-                className={`flex-1 py-3 px-4 text-center border-b-2 transition-colors flex items-center justify-center gap-2 ${
+                className={`flex-1 py-2 px-3 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer ${
                   activeTab === 'resources'
-                    ? 'border-[#2563eb] text-[#2563eb] bg-slate-800/40'
-                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
                 }`}
               >
                 <FileText className="w-3.5 h-3.5" />
-                Tài liệu ({attachments.length})
+                <span>Tài liệu ({attachments.length})</span>
               </button>
 
               <button
                 onClick={() => setActiveTab('qa')}
-                className={`flex-1 py-3 px-4 text-center border-b-2 transition-colors flex items-center justify-center gap-2 ${
+                className={`flex-1 py-2 px-3 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer ${
                   activeTab === 'qa'
-                    ? 'border-[#2563eb] text-[#2563eb] bg-slate-800/40'
-                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
                 }`}
               >
                 <MessageSquare className="w-3.5 h-3.5" />
-                Hỏi đáp Q&A
+                <span>Hỏi đáp Q&A</span>
               </button>
             </div>
 
@@ -1164,6 +1207,113 @@ export const LearningRoom: React.FC<LearningRoomProps> = ({
             }
           }}
         />
+      )}
+
+      {/* Review Modal */}
+      {isReviewModalOpen && !previewMode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-[#1e293b] border border-slate-700 w-full max-w-md rounded-2xl p-6 text-white shadow-2xl relative">
+            <button
+              onClick={() => {
+                setIsReviewModalOpen(false);
+                setReviewError(null);
+                setReviewSuccessMsg('');
+              }}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2 mb-4">
+              <Star className="w-6 h-6 fill-amber-400 text-amber-400" />
+              <h3 className="text-base font-bold">Đánh Giá Khóa Học</h3>
+            </div>
+
+            <p className="text-xs text-slate-400 mb-4 line-clamp-1">
+              Khóa học: <span className="text-white font-medium">{course.title}</span>
+            </p>
+
+            {reviewSuccessMsg ? (
+              <div className="p-4 bg-emerald-950/40 border border-emerald-600/50 rounded-xl text-center text-xs text-emerald-300 flex items-center justify-center gap-2">
+                <Check className="w-4 h-4 text-emerald-400" />
+                <span>{reviewSuccessMsg}</span>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmitCourseReview} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-2">
+                    Mức độ hài lòng của bạn:
+                  </label>
+                  <div className="flex items-center gap-2" role="radiogroup" aria-label="Đánh giá sao">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setReviewStar(s)}
+                        className="p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                      >
+                        <Star
+                          className={`w-7 h-7 ${
+                            s <= reviewStar
+                              ? 'fill-amber-400 text-amber-400'
+                              : 'text-slate-600'
+                          }`}
+                        />
+                      </button>
+                    ))}
+                    <span className="text-xs font-bold text-amber-300 ml-2">
+                      {reviewStar === 5 ? 'Tuyệt vời (5★)' : reviewStar === 4 ? 'Rất tốt (4★)' : reviewStar === 3 ? 'Bình thường (3★)' : reviewStar === 2 ? 'Kém (2★)' : 'Rất kém (1★)'}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Nhận xét & cảm nghĩ:
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    placeholder="Chia sẻ cảm nhận của bạn về nội dung bài giảng, giảng viên..."
+                    required
+                    maxLength={1000}
+                    className="w-full bg-[#0f172a] border border-slate-700 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  />
+                  <div className="text-right text-[10px] text-slate-500 mt-1">
+                    {reviewComment.length}/1000 ký tự
+                  </div>
+                </div>
+
+                {reviewError && (
+                  <div className="p-3 bg-rose-950/40 border border-rose-600/50 rounded-xl text-xs text-rose-300 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>{reviewError}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsReviewModalOpen(false)}
+                    disabled={reviewSubmitting}
+                    className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer transition-colors"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={reviewSubmitting || !reviewComment.trim()}
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors"
+                  >
+                    {reviewSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    <span>{reviewSubmitting ? 'Đang gửi...' : 'Gửi Đánh Giá'}</span>
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

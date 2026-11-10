@@ -3,6 +3,7 @@ import { formatDateTime } from '../../utils/format';
 
 export interface PayoutRequestDto {
   payoutId: string;
+  instructorId?: string;
   amount: number;
   status: string;
   bankCode?: string;
@@ -27,7 +28,7 @@ export const mapPayoutRequest = (dto: PayoutRequestDto): PayoutRequest => {
 
   return {
     id: dto.payoutId || '',
-    instructorId: '',
+    instructorId: dto.instructorId || '',
     instructorName: dto.accountName || 'Giảng viên',
     amount: Number(dto.amount) || 0,
     currencyCode: 'VND',

@@ -29,6 +29,7 @@ const AUTH_ERROR_MESSAGES: Record<number, string> = {
   2016: 'Mã OTP không chính xác. Vui lòng kiểm tra lại.',
   2017: 'Mã OTP đã hết hạn hoặc không tồn tại. Vui lòng gửi lại yêu cầu.',
   2018: 'Xác thực tài khoản Google không thành công hoặc token đã hết hạn.',
+  2023: 'Thiết bị/trình duyệt này đã được sử dụng để đăng ký một tài khoản khác. Mỗi thiết bị chỉ được phép đăng ký duy nhất 1 tài khoản.',
 };
 
 /**
@@ -63,6 +64,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
   const [registerOtp, setRegisterOtp] = useState('');
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
+  const [registeredAccountOnDevice, setRegisteredAccountOnDevice] = useState<string | null>(() => {
+    return localStorage.getItem('edutech_registered_device_account');
+  });
 
   // Forgot Password state
   const [forgotStep, setForgotStep] = useState<1 | 2>(1);
@@ -183,6 +187,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
 
   const handleRegisterInit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (registeredAccountOnDevice) {
+      setErrorMsg(`Trình duyệt này đã được sử dụng để đăng ký tài khoản [${registeredAccountOnDevice}]. Mỗi thiết bị chỉ được phép đăng ký duy nhất 1 tài khoản.`);
+      return;
+    }
     if (!email || !password || !fullName) {
       setErrorMsg('Vui lòng điền đầy đủ họ tên, email và mật khẩu.');
       return;

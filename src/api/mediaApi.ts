@@ -1,5 +1,6 @@
 import axiosClient from './axiosClient';
 import { API_BASE_URL } from './config';
+import { unwrap, type ApiEnvelope } from './response';
 
 export interface PresignedUrlResponse {
   uploadUrl: string;
@@ -26,12 +27,12 @@ export const mediaApi = {
 
   // 2. Yêu cầu cấp Presigned URL để upload video trực tiếp lên MinIO storage
   getPresignedUploadUrl: async (originalFileName: string, contentType: string, fileSize?: number): Promise<PresignedUrlResponse> => {
-    const res: any = await axiosClient.post('/media-service/api/v1/media/upload-url', {
+    const res = await axiosClient.post<ApiEnvelope<PresignedUrlResponse>>('/media-service/api/v1/media/upload-url', {
       originalFileName,
       contentType: contentType || 'video/mp4',
       fileSize: fileSize || 0,
     });
-    return res?.data || res;
+    return unwrap(res);
   },
 
   // 2.1. Xác nhận đã upload xong lên MinIO (bắt đầu kích hoạt FFmpeg worker)
@@ -41,8 +42,8 @@ export const mediaApi = {
 
   // 2.2. Kiểm tra trạng thái xử lý video (PENDING -> PROCESSING -> COMPLETED/FAILED)
   getMediaStatus: async (mediaId: string): Promise<MediaStatusResponse> => {
-    const res: any = await axiosClient.get(`/media-service/api/v1/media/${mediaId}/status`);
-    return res?.data || res;
+    const res = await axiosClient.get<ApiEnvelope<MediaStatusResponse>>(`/media-service/api/v1/media/${mediaId}/status`);
+    return unwrap(res);
   },
 
   // 3. Upload file trực tiếp lên MinIO bằng Presigned URL

@@ -211,6 +211,8 @@ export interface OrderSummary {
   totalPrice: number;
   currencyCode: string;
   status: 'PENDING' | 'CANCELLED' | 'PAID' | 'REFUND_REQUESTED' | 'REFUNDED' | 'DELETED';
+  transactionNo?: string;
+  paidAt?: string;
   createdAt: string;
   rawCreatedAt?: string;
   items: OrderItem[];

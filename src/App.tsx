@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import {
   Routes,
   Route,
@@ -15,15 +15,32 @@ import { InstructorLayout } from './layouts/InstructorLayout';
 import { AdminLayout } from './layouts/AdminLayout';
 import { CourseCatalog } from './components/catalog/CourseCatalog';
 import { CourseDetail } from './components/catalog/CourseDetail';
-import { LearningRoom } from './components/learning/LearningRoom';
-import { CertificateView } from './components/certificate/CertificateView';
-import { PublicVerifyView } from './components/certificate/PublicVerifyView';
-import { InstructorStudio } from './components/instructor/InstructorStudio';
-import { InstructorCourseManager } from './components/instructor/InstructorCourseManager';
-import { AdminPortal } from './components/admin/AdminPortal';
 import { AuthModal } from './components/auth/AuthModal';
-import { PaymentResultView } from './components/payment/PaymentResultView';
-import { OrderHistoryModal } from './components/payment/OrderHistoryModal';
+
+const LearningRoom = lazy(() =>
+  import('./components/learning/LearningRoom').then(m => ({ default: m.LearningRoom }))
+);
+const CertificateView = lazy(() =>
+  import('./components/certificate/CertificateView').then(m => ({ default: m.CertificateView }))
+);
+const PublicVerifyView = lazy(() =>
+  import('./components/certificate/PublicVerifyView').then(m => ({ default: m.PublicVerifyView }))
+);
+const InstructorStudio = lazy(() =>
+  import('./components/instructor/InstructorStudio').then(m => ({ default: m.InstructorStudio }))
+);
+const InstructorCourseManager = lazy(() =>
+  import('./components/instructor/InstructorCourseManager').then(m => ({ default: m.InstructorCourseManager }))
+);
+const AdminPortal = lazy(() =>
+  import('./components/admin/AdminPortal').then(m => ({ default: m.AdminPortal }))
+);
+const PaymentResultView = lazy(() =>
+  import('./components/payment/PaymentResultView').then(m => ({ default: m.PaymentResultView }))
+);
+const OrderHistoryModal = lazy(() =>
+  import('./components/payment/OrderHistoryModal').then(m => ({ default: m.OrderHistoryModal }))
+);
 import { parseVNPayCallback, cleanUrlQueryParams } from './utils/vnpayHelper';
 import { canAccessPortal } from './utils/roles';
 import { getPendingPurchase, clearPendingPurchase } from './utils/pendingPurchase';
@@ -405,7 +422,14 @@ export default function App() {
   };
 
   return (
-    <>
+    <Suspense
+      fallback={
+        <div className="min-h-[60vh] flex items-center justify-center gap-2 text-sm text-slate-500">
+          <Loader2 className="w-5 h-5 animate-spin text-[#2563eb]" />
+          <span>Đang tải giao diện phân hệ...</span>
+        </div>
+      }
+    >
       <Routes>
         {/* 1. Trang chủ / Danh mục khóa học */}
         <Route
@@ -656,7 +680,7 @@ export default function App() {
           </div>
         </div>
       )}
-    </>
+    </Suspense>
   );
 }
 

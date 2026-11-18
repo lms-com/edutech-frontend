@@ -17,6 +17,8 @@ export interface OrderResponseDto {
   totalPrice?: number;
   currencyCode?: string;
   status: 'PENDING' | 'CANCELLED' | 'PAID' | 'REFUND_REQUESTED' | 'REFUNDED' | 'DELETED';
+  transactionNo?: string;
+  paidAt?: string;
   createdAt?: string;
   orderDetails?: OrderDetailDto[];
 }
@@ -36,6 +38,8 @@ export const mapOrderSummary = (dto: OrderResponseDto): OrderSummary => ({
   totalPrice: Number(dto.totalPrice) || 0,
   currencyCode: dto.currencyCode || 'VND',
   status: dto.status || 'PENDING',
+  transactionNo: dto.transactionNo,
+  paidAt: dto.paidAt ? formatDate(dto.paidAt) : undefined,
   createdAt: formatDate(dto.createdAt),
   rawCreatedAt: dto.createdAt,
   items: (dto.orderDetails || []).map(mapOrderItem),

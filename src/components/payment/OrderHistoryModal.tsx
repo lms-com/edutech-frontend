@@ -219,9 +219,21 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
                         </span>
                         {renderStatusBadge(order.status)}
                       </div>
-                      <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-                        <Calendar className="w-3 h-3" />
-                        <span>{order.createdAt}</span>
+                      <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
+                        <span className="flex items-center gap-1.5">
+                          <Calendar className="w-3 h-3" />
+                          <span>{order.createdAt}</span>
+                        </span>
+                        {order.transactionNo && (
+                          <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-mono text-[10px] font-semibold">
+                            Mã GD VNPay: {order.transactionNo}
+                          </span>
+                        )}
+                        {order.paidAt && (
+                          <span className="text-[10px] text-emerald-700 font-medium">
+                            Thanh toán: {order.paidAt}
+                          </span>
+                        )}
                       </div>
                     </div>
 
